@@ -51,6 +51,8 @@ protected:
     SymbolEntry *symbolEntry;
     Operand *dst; // The result of the subtree is stored into dst.
     Type *type;
+    bool isCond = 0;
+    bool isAnd_Or = 0;
     bool isFir = 1;
 public:
     ExprNode(SymbolEntry *symbolEntry, int kind = EXPR) : kind(kind), symbolEntry(symbolEntry), isBr(false){};
@@ -66,6 +68,8 @@ public:
     virtual Type *getType() { return type; };
     bool IsFir(){ return isFir; };
     void setnotfir(){ isFir = 0; };
+    bool IsCond() {return isCond; };
+    bool IsAnd_Or() {return isAnd_Or; };
     void setOperand(Operand* op){ dst = op; }; 
     bool isExpr() const { return kind == EXPR; };
     bool isImplictCastExpr() const { return kind == IMPLICTCASTEXPR; };
@@ -100,6 +104,7 @@ public:
     double getValue();
     void typeCheck();
     void genCode();
+    int getOp() const { return op; };
     void setType(Type* type) { this->type = type; }
 };
 
