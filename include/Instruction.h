@@ -30,7 +30,7 @@ public:
     MachineOperand *genMachineVReg(bool fpu);
     MachineOperand *genMachineImm(int val);
     MachineOperand *genMachineLabel(int block_no);
-    MachineOperand *immToVReg(MachineOperand *, MachineBlock *);
+    void DeuLegal(int imm,MachineOperand *, MachineBlock *);
     virtual void genMachineCode(AsmBuilder *) = 0;
 
 protected:

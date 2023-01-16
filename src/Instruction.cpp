@@ -641,27 +641,6 @@ MachineOperand *Instruction::genMachineLabel(int block_no)
     return new MachineOperand(label);
 }
 
-MachineOperand *Instruction::immToVReg(MachineOperand *imm, MachineBlock *cur_block)
-{
-    assert(imm->isImm());
-    int value = imm->getVal();
-    auto internal_reg = genMachineVReg();
-    if (AsmBuilder::judge(value))
-    {
-        auto cur_inst = new MovMInstruction(cur_block, MovMInstruction::MOV, internal_reg, imm);//将立即数加载到虚拟寄存器中
-        cur_block->InsertInst(cur_inst);
-    }
-    else
-    {
-        cur_block->InsertInst(new MovMInstruction(cur_block, MovMInstruction::MOV, internal_reg, genMachineImm(value & 0xffff)));
-        if (value & 0xff0000)
-            cur_block->InsertInst(new BinaryMInstruction(cur_block, BinaryMInstruction::ADD, internal_reg, internal_reg, genMachineImm(value & 0xff0000)));
-        if (value & 0xff000000)
-            cur_block->InsertInst(new BinaryMInstruction(cur_block, BinaryMInstruction::ADD, internal_reg, internal_reg, genMachineImm(value & 0xff000000)));
-    }
-    return internal_reg;
-}
-
 void AllocaInstruction::genMachineCode(AsmBuilder *builder)
 {
     /* HINT:
@@ -739,7 +718,19 @@ void StoreInstruction::genMachineCode(AsmBuilder *builder)
     int strOp = floatVersion ? StoreMInstruction::VSTR : StoreMInstruction::STR;
     if (src->isImm()) // 这里立即数可能为浮点数，这样做也没问题
     {
-        src = new MachineOperand(*immToVReg(src, cur_block));
+            int value=src->getVal(); 
+            auto internal_r = genMachineVReg();
+            if (AsmBuilder::judge(value))
+           {
+                auto cur_inst = new MovMInstruction(cur_block, MovMInstruction::MOV, internal_r, src);//将立即数加载到虚拟寄存器中
+                cur_block->InsertInst(cur_inst);
+           }
+            else
+            {
+                DeuLegal(value,internal_r,cur_block);
+            }
+            src = new MachineOperand(*internal_r);
+            
         if (floatVersion)
         {
             auto internal_reg = genMachineVReg(true);
@@ -814,7 +805,19 @@ void BinaryInstruction::genMachineCode(AsmBuilder *builder)
     MachineInstruction *cur_inst = nullptr;
     if (src1->isImm())
     {
-        src1 = new MachineOperand(*immToVReg(src1, cur_block));
+           int value=src1->getVal(); 
+            auto internal_r = genMachineVReg();
+            if (AsmBuilder::judge(value))
+           {
+                auto cur_inst = new MovMInstruction(cur_block, MovMInstruction::MOV, internal_r, src1);//将立即数加载到虚拟寄存器中
+                cur_block->InsertInst(cur_inst);
+           }
+            else
+            {
+                DeuLegal(value,internal_r,cur_block);
+            }
+            src1 = new MachineOperand(*internal_r);
+            
         if (this->opcode>=BinaryInstruction::FADD&&this->opcode<=BinaryInstruction::FDIV)
         {
             auto internal_reg = genMachineVReg(true);
@@ -826,7 +829,18 @@ void BinaryInstruction::genMachineCode(AsmBuilder *builder)
     {
         if (this->opcode>=BinaryInstruction::FADD&&this->opcode<=BinaryInstruction::FDIV) // 如果是浮点数，直接放寄存器里
         {
-            src2 = new MachineOperand(*immToVReg(src2, cur_block));
+            int value=src2->getVal(); 
+            auto internal_r = genMachineVReg();
+            if (AsmBuilder::judge(value))
+           {
+                auto cur_inst = new MovMInstruction(cur_block, MovMInstruction::MOV, internal_r, src2);//将立即数加载到虚拟寄存器中
+                cur_block->InsertInst(cur_inst);
+           }
+            else
+            {
+                DeuLegal(value,internal_r,cur_block);
+            }
+            src2 = new MachineOperand(*internal_r);
             auto internal_reg = genMachineVReg(true);
             cur_block->InsertInst(new MovMInstruction(cur_block, MovMInstruction::VMOV, internal_reg, src2));
             src2 = new MachineOperand(*internal_reg);
@@ -834,7 +848,18 @@ void BinaryInstruction::genMachineCode(AsmBuilder *builder)
         else if (opcode == MUL || opcode == DIV || opcode == MOD || !AsmBuilder::judge(src2->getVal()))
         {
             // int类型，按需放寄存器里
-            src2 = new MachineOperand(*immToVReg(src2, cur_block));
+            int value=src2->getVal(); 
+            auto internal_r = genMachineVReg();
+            if (AsmBuilder::judge(value))
+           {
+                auto cur_inst = new MovMInstruction(cur_block, MovMInstruction::MOV, internal_r, src2);//将立即数加载到虚拟寄存器中
+                cur_block->InsertInst(cur_inst);
+           }
+            else
+            {
+                DeuLegal(value,internal_r,cur_block);
+            }
+            src2 = new MachineOperand(*internal_r);
         }
     }
     switch (opcode)
@@ -969,7 +994,18 @@ void CmpInstruction::genMachineCode(AsmBuilder *builder)
     if (src1->isImm())
     {
         //将其先存入虚拟寄存器中
-        src1 = new MachineOperand(*immToVReg(src1, cur_block));
+        int value=src1->getVal(); 
+            auto internal_r = genMachineVReg();
+            if (AsmBuilder::judge(value))
+           {
+                auto cur_inst = new MovMInstruction(cur_block, MovMInstruction::MOV, internal_r, src1);//将立即数加载到虚拟寄存器中
+                cur_block->InsertInst(cur_inst);
+           }
+            else
+            {
+                DeuLegal(value,internal_r,cur_block);
+            }
+            src1 = new MachineOperand(*internal_r);
         if (this->opcode>=FE&&this->opcode<=FG)
         {
             auto internal_reg = genMachineVReg(true);
@@ -979,7 +1015,18 @@ void CmpInstruction::genMachineCode(AsmBuilder *builder)
     }
     if (src2->isImm())
     {
-        src2 = new MachineOperand(*immToVReg(src2, cur_block));
+            int value=src2->getVal(); 
+            auto internal_r = genMachineVReg();
+            if (AsmBuilder::judge(value))
+           {
+                auto cur_inst = new MovMInstruction(cur_block, MovMInstruction::MOV, internal_r, src2);//将立即数加载到虚拟寄存器中
+                cur_block->InsertInst(cur_inst);
+           }
+            else
+            {
+                DeuLegal(value,internal_r,cur_block);
+            }
+            src2 = new MachineOperand(*internal_r);
         if (this->opcode>=FE&&this->opcode<=FG)
         {
             auto internal_reg = genMachineVReg(true);
@@ -1069,7 +1116,18 @@ void CallInstruction::genMachineCode(AsmBuilder *builder)
         // 一条mov解决不了
         if (param->isImm())
         {
-            param = new MachineOperand(*immToVReg(param, cur_block));
+            int value=param->getVal(); 
+                auto internal_r = genMachineVReg();
+            if (AsmBuilder::judge(value))
+           {
+                auto cur_inst = new MovMInstruction(cur_block, MovMInstruction::MOV, internal_r, param);//将立即数加载到虚拟寄存器中
+                cur_block->InsertInst(cur_inst);
+           }
+            else
+            {
+                DeuLegal(value,internal_r,cur_block);
+            }
+            param = new MachineOperand(*internal_r);
         }
         // 用mov指令把参数放到对应寄存器里
         cur_block->InsertInst(new MovMInstruction(cur_block, MovMInstruction::MOV, genMachineReg(sum), param));
@@ -1085,7 +1143,18 @@ void CallInstruction::genMachineCode(AsmBuilder *builder)
         auto param = genMachineOperand(operands[i]);
         if (param->isImm())
         {
-            param = new MachineOperand(*immToVReg(param, cur_block));
+            int value=param->getVal(); 
+                auto internal_r = genMachineVReg();
+            if (AsmBuilder::judge(value))
+           {
+                auto cur_inst = new MovMInstruction(cur_block, MovMInstruction::MOV, internal_r, param);//将立即数加载到虚拟寄存器中
+                cur_block->InsertInst(cur_inst);
+           }
+            else
+            {
+                DeuLegal(value,internal_r,cur_block);
+            }
+            param = new MachineOperand(*internal_r);
             cur_block->InsertInst(new MovMInstruction(cur_block, MovMInstruction::VMOV, genMachineReg(sum, true), param));
         }
         else
@@ -1113,7 +1182,18 @@ void CallInstruction::genMachineCode(AsmBuilder *builder)
         {
             if (param->isImm())
             {
-                param = new MachineOperand(*immToVReg(param, cur_block));
+                int value=param->getVal(); 
+                auto internal_r = genMachineVReg();
+            if (AsmBuilder::judge(value))
+           {
+                auto cur_inst = new MovMInstruction(cur_block, MovMInstruction::MOV, internal_r, param);//将立即数加载到虚拟寄存器中
+                cur_block->InsertInst(cur_inst);
+           }
+            else
+            {
+                DeuLegal(value,internal_r,cur_block);
+            }
+                param = new MachineOperand(*internal_r);
             }
             cur_block->InsertInst(new StackMInstrcuton(cur_block, StackMInstrcuton::PUSH, {param}));
         }
@@ -1128,8 +1208,23 @@ void CallInstruction::genMachineCode(AsmBuilder *builder)
         auto stack_size = genMachineImm(param_size_in_stack);
         if (AsmBuilder::judge(param_size_in_stack))
             cur_block->InsertInst(new BinaryMInstruction(cur_block, BinaryMInstruction::ADD, sp, sp, stack_size));
-        else
-            cur_block->InsertInst(new BinaryMInstruction(cur_block, BinaryMInstruction::ADD, sp, sp, new MachineOperand(*immToVReg(stack_size, cur_block))));
+        else{
+            auto ret_value = genMachineOperand(operands[0]);
+        if (ret_value->isImm()){
+            int value=stack_size->getVal(); 
+            auto internal_r = genMachineVReg();
+            if (AsmBuilder::judge(value))
+           {
+                auto cur_inst = new MovMInstruction(cur_block, MovMInstruction::MOV, internal_r, stack_size);//将立即数加载到虚拟寄存器中
+                cur_block->InsertInst(cur_inst);
+           }
+            else
+            {
+                DeuLegal(value,internal_r,cur_block);
+            }
+            cur_block->InsertInst(new BinaryMInstruction(cur_block, BinaryMInstruction::ADD, sp, sp, new MachineOperand(*internal_r)));
+        }
+        }
     }
     if (operands[0])
     {
@@ -1152,8 +1247,22 @@ void RetInstruction::genMachineCode(AsmBuilder *builder)
     if (operands.size() > 0)
     {
         auto ret_value = genMachineOperand(operands[0]);
-        if (ret_value->isImm())
-            ret_value = new MachineOperand(*immToVReg(ret_value, cur_bb));
+        if (ret_value->isImm()){
+            int value=ret_value->getVal(); 
+            auto internal_r = genMachineVReg();
+            if (AsmBuilder::judge(value))
+           {
+                auto cur_inst = new MovMInstruction(cur_bb, MovMInstruction::MOV, internal_r, ret_value);//将立即数加载到虚拟寄存器中
+                cur_bb->InsertInst(cur_inst);
+           }
+            else
+            {
+                DeuLegal(value,internal_r,cur_bb);
+            }
+            ret_value = new MachineOperand(*internal_r);
+            //internal_reg1 = new MachineOperand(*internal_r);
+        }
+            
         if (operands[0]->getType()->isFloat())
         {
             if (ret_value->isFReg())
@@ -1226,7 +1335,19 @@ void GepInstruction::genMachineCode(AsmBuilder *builder)
         }
         else
         {
-            cur_block->InsertInst(new BinaryMInstruction(cur_block, BinaryMInstruction::ADD, base, genMachineReg(11), new MachineOperand(*immToVReg(off, cur_block))));
+            int value=off->getVal(); 
+            auto internal_r = genMachineVReg();
+            if (AsmBuilder::judge(value))
+           {
+                auto cur_inst = new MovMInstruction(cur_block, MovMInstruction::MOV, internal_r, off);//将立即数加载到虚拟寄存器中
+                cur_block->InsertInst(cur_inst);
+           }
+            else
+            {
+                DeuLegal(value,internal_r,cur_block);
+            }
+            //src = new MachineOperand(*internal_reg);
+            cur_block->InsertInst(new BinaryMInstruction(cur_block, BinaryMInstruction::ADD, base, genMachineReg(11), new MachineOperand(*internal_r)));
             base = new MachineOperand(*base);
         }
     }
@@ -1271,7 +1392,19 @@ void GepInstruction::genMachineCode(AsmBuilder *builder)
         auto internal_reg1 = genMachineImm(off);
         if (!AsmBuilder::judge(off))
         {
-            internal_reg1 = new MachineOperand(*immToVReg(internal_reg1, cur_block));
+            int value=internal_reg1->getVal(); 
+            auto internal_r = genMachineVReg();
+            if (AsmBuilder::judge(value))
+           {
+                auto cur_inst = new MovMInstruction(cur_block, MovMInstruction::MOV, internal_r, internal_reg1);//将立即数加载到虚拟寄存器中
+                cur_block->InsertInst(cur_inst);
+           }
+            else
+            {
+                DeuLegal(value,internal_r,cur_block);
+            }
+            //src = new MachineOperand(*internal_reg);
+            internal_reg1 = new MachineOperand(*internal_r);
         }
         cur_block->InsertInst(new BinaryMInstruction(cur_block, BinaryMInstruction::ADD, new MachineOperand(*base), new MachineOperand(*base), new MachineOperand(*internal_reg1)));
     }
@@ -1360,8 +1493,18 @@ void F2IInstruction::genMachineCode(AsmBuilder *builder)
     auto src = genMachineOperand(operands[1]);
     if (src->isImm())
     { // 按理说立即数其实可以不用这条指令的，我们直接强制类型转化一下就行
-        
-        src = new MachineOperand(*immToVReg(src, cur_block));
+        int value=src->getVal();
+        auto internal_reg = genMachineVReg();
+            if (AsmBuilder::judge(value))
+           {
+                auto cur_inst = new MovMInstruction(cur_block, MovMInstruction::MOV, internal_reg, src);//将立即数加载到虚拟寄存器中
+                cur_block->InsertInst(cur_inst);
+           }
+            else
+            {
+                DeuLegal(value,internal_reg,cur_block);
+            }
+        src = new MachineOperand(*internal_reg);
     }
     if (src->isFReg())
     { // 如果src本来就是个浮点寄存器
@@ -1405,9 +1548,27 @@ void I2FInstruction::genMachineCode(AsmBuilder *builder)
     auto src = genMachineOperand(operands[1]);
     if (src->isImm())
     {
-        src = new MachineOperand(*immToVReg(src, cur_block));
+        int value=src->getVal();
+        auto internal_reg = genMachineVReg();
+            if (AsmBuilder::judge(value))
+           {
+                auto cur_inst = new MovMInstruction(cur_block, MovMInstruction::MOV, internal_reg, src);//将立即数加载到虚拟寄存器中
+                cur_block->InsertInst(cur_inst);
+           }
+            else
+            {
+                DeuLegal(value,internal_reg,cur_block);
+            }
+        src = new MachineOperand(*internal_reg);
     }
     assert(dst->isFReg());
     cur_block->InsertInst(new MovMInstruction(cur_block, MovMInstruction::VMOV, dst, src));
     cur_block->InsertInst(new VcvtMInstruction(cur_block, VcvtMInstruction::STF, dst, dst));
+}
+void Instruction::DeuLegal(int imm,MachineOperand* internal_reg,MachineBlock* cur_block){
+        cur_block->InsertInst(new MovMInstruction(cur_block, MovMInstruction::MOV, internal_reg, genMachineImm(imm & 0xffff)));
+        if (imm & 0xff0000)
+            cur_block->InsertInst(new BinaryMInstruction(cur_block, BinaryMInstruction::ADD, internal_reg, internal_reg, genMachineImm(imm & 0xff0000)));
+        if (imm & 0xff000000)
+            cur_block->InsertInst(new BinaryMInstruction(cur_block, BinaryMInstruction::ADD, internal_reg, internal_reg, genMachineImm(imm & 0xff000000)));
 }
