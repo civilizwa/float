@@ -524,8 +524,32 @@ void BinaryExpr::genCode()
         // Todo
         expr1->genCode();
         expr2->genCode();
-        int cmpOps[] = {CmpInstruction::L, CmpInstruction::LE, CmpInstruction::G, CmpInstruction::GE, CmpInstruction::E, CmpInstruction::NE};
-        new CmpInstruction(cmpOps[op - LESS], dst, expr1->getOperand(), expr2->getOperand(), builder->getInsertBB());
+        int Cmp_opcode;
+        //生成比较指令   //可以换成switch, , , EQUAL, NOTEQUAL
+        switch(op){
+            case LESS:
+                Cmp_opcode=CmpInstruction::L;
+                break;
+            case LESSEQUAL:
+                Cmp_opcode=CmpInstruction::LE;
+                break;
+            case GREATER:
+                Cmp_opcode=CmpInstruction::G;
+                break;
+            case GREATEREQUAL:
+                Cmp_opcode=CmpInstruction::GE;
+                break;
+            case EQUAL:
+                Cmp_opcode=CmpInstruction::E;
+                break;
+            case NOTEQUAL:
+                Cmp_opcode=CmpInstruction::NE;
+                break;
+            default:
+                break;
+        }
+        //int cmpOps[] = {CmpInstruction::L, CmpInstruction::LE, CmpInstruction::G, CmpInstruction::GE, CmpInstruction::E, CmpInstruction::NE};
+        new CmpInstruction(Cmp_opcode, dst, expr1->getOperand(), expr2->getOperand(), builder->getInsertBB());
         /* true和false未知，interB已知
         cmp
         br true, interB
