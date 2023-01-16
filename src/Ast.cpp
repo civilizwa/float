@@ -431,8 +431,37 @@ void BinaryExpr::genCode()
         expr1->genCode();
         expr2->genCode();
         int Cmp_opcode;
-        //生成比较指令   //可以换成switch, , , EQUAL, NOTEQUAL
-        switch(op){
+        auto src1=expr1->getOperand();
+        auto src2=expr2->getOperand();
+        //生成比较指令   
+        //浮点数类型，生成浮点类型指令
+        if(src1->getType()->isFloat() || src2->getType()->isFloat()){
+            switch (op)
+            {
+            case LESS:
+                Cmp_opcode=CmpInstruction::FL;
+                break;
+            case LESSEQUAL:
+                Cmp_opcode=CmpInstruction::FLE;
+                break;
+            case GREATER:
+                Cmp_opcode=CmpInstruction::FG;
+                break;
+            case GREATEREQUAL:
+                Cmp_opcode=CmpInstruction::FGE;
+                break;
+            case EQUAL:
+                Cmp_opcode=CmpInstruction::FE;
+                break;
+            case NOTEQUAL:
+                Cmp_opcode=CmpInstruction::FNE;
+                break;
+            default:
+                break;
+            }
+        }
+        else{
+            switch(op){
             case LESS:
                 Cmp_opcode=CmpInstruction::L;
                 break;
@@ -453,9 +482,11 @@ void BinaryExpr::genCode()
                 break;
             default:
                 break;
+            }
         }
+        
         //int cmpOps[] = {CmpInstruction::L, CmpInstruction::LE, CmpInstruction::G, CmpInstruction::GE, CmpInstruction::E, CmpInstruction::NE};
-        new CmpInstruction(Cmp_opcode, dst, expr1->getOperand(), expr2->getOperand(), builder->getInsertBB());
+        new CmpInstruction(Cmp_opcode, dst, src1, src2, builder->getInsertBB());
         /* true和false未知，interB已知
         cmp
         br true, interB
@@ -540,7 +571,7 @@ void UnaryExpr::genCode()
         }
         else if (expr->getType()->isFloat())
         {
-            new CmpInstruction(CmpInstruction::E, dst, expr->getOperand(), new Operand(new ConstantSymbolEntry(TypeSystem::floatType, 0)), builder->getInsertBB());
+            new CmpInstruction(CmpInstruction::FE, dst, expr->getOperand(), new Operand(new ConstantSymbolEntry(TypeSystem::floatType, 0)), builder->getInsertBB());
         }
         else
         {
@@ -651,7 +682,7 @@ void ImplictCastExpr::genCode()
     }
     else if (op == FTB)
     {
-        new CmpInstruction(CmpInstruction::NE, dst, expr->getOperand(), new Operand(new ConstantSymbolEntry(TypeSystem::floatType, 0)), builder->getInsertBB());
+        new CmpInstruction(CmpInstruction::FNE, dst, expr->getOperand(), new Operand(new ConstantSymbolEntry(TypeSystem::floatType, 0)), builder->getInsertBB());
     }
     else if (op == BTF)
     {

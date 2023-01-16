@@ -149,7 +149,6 @@ BinaryInstruction::BinaryInstruction(unsigned opcode, Operand *dst, Operand *src
     dst->setDef(this);
     src1->addUse(this);
     src2->addUse(this);
-    //floatVersion = (src1->getType()->isFloat() || src2->getType()->isFloat());
 }
 
 BinaryInstruction::~BinaryInstruction()
@@ -249,7 +248,7 @@ CmpInstruction::CmpInstruction(unsigned opcode, Operand *dst, Operand *src1, Ope
     dst->setDef(this);
     src1->addUse(this);
     src2->addUse(this);
-    floatVersion = (src1->getType()->isFloat() || src2->getType()->isFloat());
+    //floatVersion = (src1->getType()->isFloat() || src2->getType()->isFloat());
 }
 
 CmpInstruction::~CmpInstruction()
@@ -268,31 +267,89 @@ void CmpInstruction::output() const
     src1 = operands[1]->toStr();
     src2 = operands[2]->toStr();
     type = operands[1]->getType()->toStr();
+    std::string cmp;
     switch (opcode)
     {
     case E:
-        op = floatVersion ? "oeq" : "eq";
+    {
+        op = "eq";
+        cmp="icmp";
+    }
         break;
     case NE:
-        op = floatVersion ? "une" : "ne";
+    {
+        op = "ne";
+        cmp="icmp";
+    }
         break;
     case L:
-        op = floatVersion ? "olt" : "slt";
+    {
+        op = "slt";
+        cmp="icmp";
+    }
         break;
     case LE:
-        op = floatVersion ? "ole" : "sle";
+    {
+        op = "sle";
+        cmp="icmp";
+    }
         break;
     case G:
-        op = floatVersion ? "ogt" : "sgt";
+    {
+        op = "sgt";
+        cmp="icmp";
+    }
         break;
     case GE:
-        op = floatVersion ? "oge" : "sge";
+    {
+        op = "sge";
+        cmp="icmp";
+    }
+        break;
+    case FE:
+    {
+        op = "oeq";
+        cmp="fcmp";
+    }
+        break;
+    case FNE:
+    {
+        op = "une";
+        cmp="fcmp";
+    }
+        break;
+    case FL:
+    {
+        op = "olt";
+        cmp="fcmp";
+    }
+        break;
+    case FLE:
+    {
+        op = "ole";
+        cmp="fcmp";
+    }
+        break;
+    case FG:
+    {
+        op = "ogt";
+        cmp="fcmp";
+    }
+        break;
+    case FGE:
+    {
+        op = "oge";
+        cmp="fcmp";
+    }
         break;
     default:
+    {
         op = "";
+        cmp="icmp";
+    }
         break;
     }
-    std::string cmp = floatVersion ? "fcmp" : "icmp";
+    //std::string cmp = floatVersion ? "fcmp" : "icmp";
     fprintf(yyout, "  %s = %s %s %s %s, %s\n", dst.c_str(), cmp.c_str(), op.c_str(), type.c_str(), src1.c_str(), src2.c_str());
 }
 
@@ -914,7 +971,7 @@ void CmpInstruction::genMachineCode(AsmBuilder *builder)
     {
         //将其先存入虚拟寄存器中
         src1 = new MachineOperand(*immToVReg(src1, cur_block));
-        if (floatVersion)
+        if (this->opcode>=FE&&this->opcode<=FG)
         {
             auto internal_reg = genMachineVReg(true);
             cur_block->InsertInst(new MovMInstruction(cur_block, MovMInstruction::VMOV, internal_reg, src1));
@@ -924,14 +981,14 @@ void CmpInstruction::genMachineCode(AsmBuilder *builder)
     if (src2->isImm())
     {
         src2 = new MachineOperand(*immToVReg(src2, cur_block));
-        if (floatVersion)
+        if (this->opcode>=FE&&this->opcode<=FG)
         {
             auto internal_reg = genMachineVReg(true);
             cur_block->InsertInst(new MovMInstruction(cur_block, MovMInstruction::VMOV, internal_reg, src2));
             src2 = new MachineOperand(*internal_reg);
         }
     }
-    if (floatVersion)
+    if (this->opcode>=FE&&this->opcode<=FG)
     {
         cur_block->InsertInst(new CmpMInstruction(cur_block, CmpMInstruction::VCMP, src1, src2));
         cur_block->InsertInst(new VmrsMInstruction(cur_block));
@@ -943,55 +1000,43 @@ void CmpInstruction::genMachineCode(AsmBuilder *builder)
         cur_block->InsertInst(new CmpMInstruction(cur_block, CmpMInstruction::CMP, src1, src2));
     }
     // 这里借助builder向br指令传cond
-    int cmpOpCode = 0, minusOpCode = 0;
+    // int cmpOpCode = 0, minusOpCode = 0;
     //cmpOp存储对应的opcode,minus存储相反的opcode
-    switch (opcode)
-    {
-    case E:
-    {
-        cmpOpCode = CmpMInstruction::EQ;
-        minusOpCode = CmpMInstruction::NE;
-    }
-    break;
-    case NE:
-    {
-        cmpOpCode = CmpMInstruction::NE;
-        minusOpCode = CmpMInstruction::EQ;
-    }
-    break;
-    case L:
-    {
-        cmpOpCode = CmpMInstruction::LT;
-        minusOpCode = CmpMInstruction::GE;
-    }
-    break;
-    case LE:
-    {
-        cmpOpCode = CmpMInstruction::LE;
-        minusOpCode = CmpMInstruction::GT;
-    }
-    break;
-    case G:
-    {
-        cmpOpCode = CmpMInstruction::GT;
-        minusOpCode = CmpMInstruction::LE;
-    }
-    break;
-    case GE:
-    {
-        cmpOpCode = CmpMInstruction::GE;
-        minusOpCode = CmpMInstruction::LT;
-    }
-    break;
-    default:
-        break;
-    }
     auto dst = genMachineOperand(operands[0]);
+    if(opcode==E||opcode==FE){
+        cur_block->InsertInst(new MovMInstruction(cur_block, MovMInstruction::MOV, dst, genMachineImm(1), CmpMInstruction::EQ));
+        cur_block->InsertInst(new MovMInstruction(cur_block, MovMInstruction::MOV, dst, genMachineImm(0), CmpMInstruction::NE));
+        builder->setCmpOpcode(CmpMInstruction::EQ);
+    }
+    else if(opcode==NE||opcode==FNE){
+        cur_block->InsertInst(new MovMInstruction(cur_block, MovMInstruction::MOV, dst, genMachineImm(1), CmpMInstruction::NE));
+        cur_block->InsertInst(new MovMInstruction(cur_block, MovMInstruction::MOV, dst, genMachineImm(0), CmpMInstruction::EQ));
+        builder->setCmpOpcode(CmpMInstruction::NE);
+    }
+    else if(opcode==L||opcode==FL){
+        cur_block->InsertInst(new MovMInstruction(cur_block, MovMInstruction::MOV, dst, genMachineImm(1), CmpMInstruction::LT));
+        cur_block->InsertInst(new MovMInstruction(cur_block, MovMInstruction::MOV, dst, genMachineImm(0), CmpMInstruction::GE));
+        builder->setCmpOpcode(CmpMInstruction::LT);
+    }
+    else if(opcode==LE||opcode==FLE){
+        cur_block->InsertInst(new MovMInstruction(cur_block, MovMInstruction::MOV, dst, genMachineImm(1), CmpMInstruction::LE));
+        cur_block->InsertInst(new MovMInstruction(cur_block, MovMInstruction::MOV, dst, genMachineImm(0), CmpMInstruction::GT));
+        builder->setCmpOpcode(CmpMInstruction::LE);
+    }
+    else if(opcode==G||opcode==FG){
+        cur_block->InsertInst(new MovMInstruction(cur_block, MovMInstruction::MOV, dst, genMachineImm(1), CmpMInstruction::GT));
+        cur_block->InsertInst(new MovMInstruction(cur_block, MovMInstruction::MOV, dst, genMachineImm(0), CmpMInstruction::LE));
+        builder->setCmpOpcode(CmpMInstruction::GT);
+    }
+    else if(opcode==GE||opcode==FGE){
+        cur_block->InsertInst(new MovMInstruction(cur_block, MovMInstruction::MOV, dst, genMachineImm(1), CmpMInstruction::GE));
+        cur_block->InsertInst(new MovMInstruction(cur_block, MovMInstruction::MOV, dst, genMachineImm(0), CmpMInstruction::LT));
+        builder->setCmpOpcode(CmpMInstruction::GE);
+    }
+   
     //如果cond满足，则将立即数1；赋值给dst
     //cond不满足，即满足相反条件，将0赋值给dst
-    cur_block->InsertInst(new MovMInstruction(cur_block, MovMInstruction::MOV, dst, genMachineImm(1), cmpOpCode));
-    cur_block->InsertInst(new MovMInstruction(cur_block, MovMInstruction::MOV, dst, genMachineImm(0), minusOpCode));
-    builder->setCmpOpcode(cmpOpCode);
+    
 }
 
 void UncondBrInstruction::genMachineCode(AsmBuilder *builder)

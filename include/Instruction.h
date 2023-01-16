@@ -111,14 +111,14 @@ public:
 class CmpInstruction : public Instruction
 {
 private:
-    bool floatVersion;
+    //bool floatVersion;
 
 public:
     CmpInstruction(unsigned opcode, Operand *dst, Operand *src1, Operand *src2, BasicBlock *insert_bb = nullptr);
     ~CmpInstruction();
     void output() const;
     void genMachineCode(AsmBuilder *);
-    enum { E, NE, GE, L, LE, G };
+    enum { E, NE, GE, L, LE, G,FE,FNE,FGE,FL,FLE,FG };
 };
 
 // unconditional branch
