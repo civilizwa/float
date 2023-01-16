@@ -40,23 +40,7 @@ protected:
     Instruction *next;
     BasicBlock *parent;
     std::vector<Operand *> operands;
-    enum
-    {
-        BINARY,
-        COND,
-        UNCOND,
-        RET,
-        CALL,
-        LOAD,
-        STORE,
-        CMP,
-        ALLOCA,
-        XOR,
-        ZEXT,
-        GEP,
-        FPTSI,
-        SITFP
-    };
+    enum { BINARY, UNARY, COND, UNCOND, RET, CALL, LOAD, STORE, CMP, ALLOCA, XOR, ZEXT, GEP, FPTSI, SITFP};
 };
 
 // meaningless instruction, used as the head node of the instruction list.
@@ -91,8 +75,9 @@ public:
 
 class StoreInstruction : public Instruction
 {
+    int paramno;
 public:
-    StoreInstruction(Operand *dst_addr, Operand *src, BasicBlock *insert_bb = nullptr);
+    StoreInstruction(Operand *dst_addr, Operand *src, BasicBlock *insert_bb = nullptr, int paramno = -1);
     ~StoreInstruction();
     void output() const;
     void genMachineCode(AsmBuilder *);
@@ -100,45 +85,29 @@ public:
 
 class BinaryInstruction : public Instruction
 {
+private:
+    bool floatVersion;
+
 public:
     BinaryInstruction(unsigned opcode, Operand *dst, Operand *src1, Operand *src2, BasicBlock *insert_bb = nullptr);
     ~BinaryInstruction();
     void output() const;
     void genMachineCode(AsmBuilder *);
-    enum
-    {
-        ADD = 0,
-        SUB,
-        MUL,
-        DIV,
-        AND,
-        OR,
-        MOD
-    };
+    enum { ADD, SUB, MUL, DIV, AND, OR, MOD, XOR };
 
-private:
-    bool floatVersion;
 };
 
 class CmpInstruction : public Instruction
 {
+private:
+    bool floatVersion;
+
 public:
     CmpInstruction(unsigned opcode, Operand *dst, Operand *src1, Operand *src2, BasicBlock *insert_bb = nullptr);
     ~CmpInstruction();
     void output() const;
     void genMachineCode(AsmBuilder *);
-    enum
-    {
-        E = 0,
-        NE,
-        GE,
-        L,
-        LE,
-        G
-    };
-
-private:
-    bool floatVersion;
+    enum { E, NE, GE, L, LE, G };
 };
 
 // unconditional branch
@@ -159,6 +128,7 @@ protected:
 class CondBrInstruction : public Instruction
 {
 public:
+    enum {E, NE, L, GE, G, LE};
     CondBrInstruction(BasicBlock *, BasicBlock *, Operand *, BasicBlock *insert_bb = nullptr);
     ~CondBrInstruction();
     void output() const;
@@ -167,6 +137,7 @@ public:
     void setFalseBranch(BasicBlock *);
     BasicBlock *getFalseBranch();
     void genMachineCode(AsmBuilder *);
+    void setop(int op) { opcode = op; };
 
 protected:
     BasicBlock *true_branch;
@@ -194,10 +165,23 @@ public:
     void genMachineCode(AsmBuilder *);
 };
 
+class UnaryInstruction : public Instruction
+{
+public:
+    UnaryInstruction(unsigned opcode, Operand* dst, Operand *src, BasicBlock *insert_bb=nullptr);    
+    ~UnaryInstruction();
+    void output() const;
+    enum{SUB, ADD, NOT};
+    void genMachineCode(AsmBuilder*);
+};
+
+//xor instruction, 用于not取反情况
+//if a is a bool var,i wanna !a, we use a xor 1.
 class XorInstruction : public Instruction // not指令
 {
 public:
     XorInstruction(Operand *dst, Operand *src, BasicBlock *insert_bb = nullptr);
+    ~XorInstruction();
     void output() const;
     void genMachineCode(AsmBuilder *);
 };
@@ -207,6 +191,7 @@ class ZextInstruction : public Instruction // bool转为int
 {
 public:
     ZextInstruction(Operand *dst, Operand *src, bool b2i = false, BasicBlock *insert_bb = nullptr);
+    ~ZextInstruction();
     void output() const;
     void genMachineCode(AsmBuilder *);
 
@@ -219,6 +204,7 @@ class GepInstruction : public Instruction
 {
 public:
     GepInstruction(Operand *dst, Operand *base, std::vector<Operand *> offs, BasicBlock *insert_bb = nullptr, bool type2 = false);
+    ~GepInstruction();
     void output() const;
     void genMachineCode(AsmBuilder *);
 

@@ -364,102 +364,7 @@ CallExpr::CallExpr(SymbolEntry *se, ExprNode *param) : ExprNode(se)
     }
 }
 
-IfStmt::IfStmt(ExprNode *cond, StmtNode *thenStmt) : cond(cond), thenStmt(thenStmt)
-{
-    if (cond->getType()->isInt())
-        this->cond = new ImplictCastExpr(cond, ImplictCastExpr::ITB);
-    else if (cond->getType()->isFloat())
-        this->cond = new ImplictCastExpr(cond, ImplictCastExpr::FTB);
-}
-
-IfElseStmt::IfElseStmt(ExprNode *cond, StmtNode *thenStmt, StmtNode *elseStmt) : cond(cond), thenStmt(thenStmt), elseStmt(elseStmt)
-{
-    if (cond->getType()->isInt())
-        this->cond = new ImplictCastExpr(cond, ImplictCastExpr::ITB);
-    else if (cond->getType()->isFloat())
-        this->cond = new ImplictCastExpr(cond, ImplictCastExpr::FTB);
-}
-
-WhileStmt::WhileStmt(ExprNode *cond, StmtNode *stmt) : cond(cond), stmt(stmt)
-{
-    if (cond->getType()->isInt())
-        this->cond = new ImplictCastExpr(cond, ImplictCastExpr::ITB);
-    else if (cond->getType()->isFloat())
-        this->cond = new ImplictCastExpr(cond, ImplictCastExpr::FTB);
-}
-
-BreakStmt::BreakStmt(StmtNode *whileStmt) : whileStmt(whileStmt)
-{
-    if (whileStmt == nullptr)
-    {
-        fprintf(stderr, "no while stmt for this break stmt\n");
-    }
-}
-
-ContinueStmt::ContinueStmt(StmtNode *whileStmt) : whileStmt(whileStmt)
-{
-    if (whileStmt == nullptr)
-    {
-        fprintf(stderr, "no while stmt for this continue stmt\n");
-    }
-}
-
-ReturnStmt::ReturnStmt(ExprNode *retValue, Type *funcRetType) : retValue(retValue)
-{
-    // 判断返回值和函数返回值是否一致
-    Type *retType;
-    if (retValue == nullptr)
-        retType = TypeSystem::voidType;
-    else
-        retType = retValue->getType();
-    if (funcRetType->isFloat() && retType->isInt())
-        this->retValue = new ImplictCastExpr(this->retValue, ImplictCastExpr::ITF);
-    else if (funcRetType->isInt() && retType->isFloat())
-        this->retValue = new ImplictCastExpr(this->retValue, ImplictCastExpr::FTI);
-    else if (retType->getKind() != funcRetType->getKind())
-        fprintf(stderr, "return type isn't equal to function type\n");
-}
-
-AssignStmt::AssignStmt(ExprNode *lval, ExprNode *expr) : lval(lval), expr(expr)
-{
-    Type *type = ((Id *)lval)->getType();
-    Type *exprType = expr->getType();
-    SymbolEntry *se = lval->getSymPtr();
-    bool flag = true;
-    if (type->isInt())
-    {
-        if (((IntType *)type)->isConst())
-        {
-            fprintf(stderr, "cannot assign to variable \'%s\' with const-qualified type \'%s\'\n",
-                    ((IdentifierSymbolEntry *)se)->toStr().c_str(), type->toStr().c_str());
-            flag = false;
-        }
-    }
-    else if (type->isFloat())
-    {
-        if (((FloatType *)type)->isConst())
-        {
-            fprintf(stderr, "cannot assign to variable \'%s\' with const-qualified type \'%s\'\n",
-                    ((IdentifierSymbolEntry *)se)->toStr().c_str(), type->toStr().c_str());
-            flag = false;
-        }
-    }
-    if (flag && expr->getType()->isBool())
-    {
-        fprintf(stderr, "cannot initialize a variable of type \'int\' with an rvalue of type \'%s\'\n",
-                expr->getType()->toStr().c_str());
-    }
-    if (type->isInt() && exprType->isFloat())
-    {
-        this->expr = new ImplictCastExpr(this->expr, ImplictCastExpr::FTI);
-    }
-    else if (type->isFloat() && exprType->isInt())
-    {
-        this->expr = new ImplictCastExpr(this->expr, ImplictCastExpr::ITF);
-    }
-}
-
-// -----------只因Code代码区------------------
+// -----------genCode代码区------------------
 
 void Node::backPatch(std::vector<Instruction *> &list, BasicBlock *bb)
 {
@@ -1273,18 +1178,6 @@ void SeqNode::output(int level)
     stmt1->output(level);
     stmt2->output(level);
 }
-
-DeclStmt::DeclStmt(Id *id, ExprNode *expr) : id(id), expr(expr)
-{
-    this->exprArray = nullptr;
-    if (expr)
-    {
-        if (id->getType()->isFloat() && expr->getType()->isInt())
-            this->expr = new ImplictCastExpr(expr, ImplictCastExpr::ITF);
-        if (id->getType()->isInt() && expr->getType()->isFloat())
-            this->expr = new ImplictCastExpr(expr, ImplictCastExpr::FTI);
-    }
-};
 
 void DeclStmt::output(int level)
 {
