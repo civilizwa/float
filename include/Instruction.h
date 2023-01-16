@@ -99,7 +99,7 @@ public:
         AND,
         OR,
         MOD,
-        XOR，
+        XOR,
         FADD,
         FSUB,
         FMUL,
