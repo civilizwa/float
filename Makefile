@@ -75,7 +75,7 @@ $(TEST_PATH)/%_std.s:$(TEST_PATH)/%.sy
 	@arm-linux-gnueabihf-gcc -x c $< -S -o $@ 
 
 $(TEST_PATH)/%.s:$(TEST_PATH)/%.sy
-	@timeout 500s $(BINARY) $< -o $@ -S 2>$(addsuffix .log, $(basename $@))
+	@timeout 5s $(BINARY) $< -o $@ -S 2>$(addsuffix .log, $(basename $@))
 	@[ $$? != 0 ] && echo "\033[1;31mCOMPILE FAIL:\033[0m $(notdir $<)" || echo "\033[1;32mCOMPILE SUCCESS:\033[0m $(notdir $<)"
 
 llvmir:$(LLVM_IR)
@@ -103,7 +103,7 @@ test:app
 		OUT=$${file%.*}.out
 		FILE=$${file##*/}
 		FILE=$${FILE%.*}
-		timeout 500s $(BINARY) $${file} -o $${ASM} -S 2>$${LOG}
+		timeout 5s $(BINARY) $${file} -o $${ASM} -S 2>$${LOG}
 		RETURN_VALUE=$$?
 		if [ $$RETURN_VALUE = 124 ]; then
 			echo "\033[1;31mFAIL:\033[0m $${FILE}\t\033[1;31mCompile Timeout\033[0m"
