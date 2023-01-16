@@ -658,7 +658,7 @@ void MachineFunction::output()
     (new MovMInstruction(entry, MovMInstruction::MOV, fp, sp))->output();
     int stackSize = stack_size;
     auto stSize = new MachineOperand(MachineOperand::IMM, stackSize);
-    if (AsmBuilder::isLegalImm(stackSize))
+    if (AsmBuilder::judge(stackSize))
     {
         (new BinaryMInstruction(entry, BinaryMInstruction::SUB, sp, sp, stSize))->output();
     }

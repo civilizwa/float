@@ -110,9 +110,6 @@ public:
 
 class CmpInstruction : public Instruction
 {
-private:
-    //bool floatVersion;
-
 public:
     CmpInstruction(unsigned opcode, Operand *dst, Operand *src1, Operand *src2, BasicBlock *insert_bb = nullptr);
     ~CmpInstruction();
@@ -148,7 +145,6 @@ public:
     void setFalseBranch(BasicBlock *);
     BasicBlock *getFalseBranch();
     void genMachineCode(AsmBuilder *);
-    void setop(int op) { opcode = op; };
 
 protected:
     BasicBlock *true_branch;
