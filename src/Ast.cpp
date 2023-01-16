@@ -10,6 +10,7 @@
 #include "Unit.h"
 
 extern Unit unit;
+extern MachineUnit mUnit;
 
 extern FILE *yyout;
 int Node::counter = 0;
@@ -38,6 +39,12 @@ BinaryExpr::BinaryExpr(SymbolEntry *se, int op, ExprNode *expr1, ExprNode *expr2
     this->dst = new Operand(se);
     this->type = se->getType();
     std::string op_type;
+    if(op >= AND)
+        isCond = true;
+    if (op == BinaryExpr::AND || op == BinaryExpr::OR)
+        isAnd_Or = true;
+    Type *type1 = expr1->getType();
+    Type *type2 = expr2->getType();
     switch (op)
     {
     case ADD:
@@ -80,112 +87,64 @@ BinaryExpr::BinaryExpr(SymbolEntry *se, int op, ExprNode *expr1, ExprNode *expr2
         op_type = "!=";
         break;
     }
-    if (expr1->getType()->isVoid() || expr2->getType()->isVoid())
-    {
-        fprintf(stderr, "invalid operand of type \'void\' to binary \'opeartor%s\'\n", op_type.c_str());
-    }
     // 前几个操作符是算术运算符，返回类型是int型，后面是逻辑运算符，返回类型是Bool型
-    Type *type1 = expr1->getType();
-    Type *type2 = expr2->getType();
     bool hasFloat = (type1->isFloat() || type2->isFloat());
-    if (op >= BinaryExpr::AND && op <= BinaryExpr::NOTEQUAL)//逻辑，转bool
-    {
+    if (this->IsCond()) { //逻辑，转bool
+        type = TypeSystem::boolType;
         // 对于AND和OR逻辑运算，如果操作数表达式不是bool型，需要进行隐式转换，转为bool型。
-        if (op == BinaryExpr::AND || op == BinaryExpr::OR)
-        {
-            if (type1->isInt())
+        if ( this->IsAnd_Or() ) {
+            if (type1->isInt() && type1->getSize() == 32)
                 this->expr1 = new ImplictCastExpr(expr1, ImplictCastExpr::ITB);
-            else if (type1->isFloat())
+            else if (type1->isFloat() && type1->getSize() == 32)
                 this->expr1 = new ImplictCastExpr(expr1, ImplictCastExpr::FTB);
-            if (type2->isInt())
+            if (type2->isInt() && type2->getSize() == 32)
                 this->expr2 = new ImplictCastExpr(expr2, ImplictCastExpr::ITB);
-            else if (type2->isFloat())
+            else if (type2->isFloat() && type2->getSize() == 32)
                 this->expr2 = new ImplictCastExpr(expr2, ImplictCastExpr::FTB);
         }
-        else
-        {
-            if (type1->isBool())
-                this->expr1 = new ImplictCastExpr(expr1, hasFloat ? ImplictCastExpr::BTF : ImplictCastExpr::BTI);
-            else if (type1->isInt() && hasFloat)
+        else {
+            if (type1->isBool() && type1->getSize() == 1)
+                if (hasFloat)
+                    this->expr1 = new ImplictCastExpr(expr1, ImplictCastExpr::BTF);
+                else
+                    this->expr1 = new ImplictCastExpr(expr1, ImplictCastExpr::BTI);
+            else if (type1->isInt() && type1->getSize() == 32 && hasFloat)
                 this->expr1 = new ImplictCastExpr(expr1, ImplictCastExpr::ITF);
-            if (type2->isBool())
-                this->expr2 = new ImplictCastExpr(expr2, hasFloat ? ImplictCastExpr::BTF : ImplictCastExpr::BTI);
+            if (type2->isBool() && type2->getSize() == 1)
+                if (hasFloat)
+                    this->expr2 = new ImplictCastExpr(expr2, ImplictCastExpr::BTF);
+                else
+                    this->expr2 = new ImplictCastExpr(expr2, ImplictCastExpr::BTI);
             else if (type2->isInt() && hasFloat)
                 this->expr2 = new ImplictCastExpr(expr2, ImplictCastExpr::ITF);
         }
     }
-    else if (op != BinaryExpr::MOD)
-    { // 如果是MOD类型的话，两个操作数一定是int，不然它走不出语法分析
+    else if (op != BinaryExpr::MOD) { 
+        // 如果是MOD类型的话，两个操作数一定是int，不然它走不出语法分析
         // 这里不考虑bool类型做操作数的情况
+        if (hasFloat)
+            type = TypeSystem::floatType;
+        else
+            type = TypeSystem::intType;
         if (type1->isInt() && hasFloat)
             this->expr1 = new ImplictCastExpr(expr1, ImplictCastExpr::ITF);
         if (type2->isInt() && hasFloat)
-        {
-            this->expr2 = new ImplictCastExpr(expr2, ImplictCastExpr::ITF);
-        }
+            this->expr2 = new ImplictCastExpr(expr2, ImplictCastExpr::ITF);      
     }
+    else
+        if (hasFloat)
+            type = TypeSystem::floatType;
+        else
+            type = TypeSystem::intType;
 }
 
 double BinaryExpr::getValue()
 {
-    // 这里虽然用double存储，但是如果结果是float，计算的时候要转成float，要不可能
-    // 精度偏高感觉
-    double value1 = expr1->getValue();
-    double value2 = expr2->getValue();
-    double value;
-    if (type->isFloat())
-    {
-        float value1 = (float)expr1->getValue();
-        float value2 = (float)expr2->getValue();
-        float value;
-        switch (op)
-        {
-        case ADD:
-            value = value1 + value2;
-            break;
-        case SUB:
-            value = value1 - value2;
-            break;
-        case MUL:
-            value = value1 * value2;
-            break;
-        case DIV:
-            value = value1 / value2;
-            break;
-        // case MOD: // 这里认为浮点数不能模
-        //     value = value1 % value2;
-        //     break;
-        case AND:
-            value = value1 && value2;
-            break;
-        case OR:
-            value = value1 || value2;
-            break;
-        case LESS:
-            value = value1 < value2;
-            break;
-        case LESSEQUAL:
-            value = value1 <= value2;
-            break;
-        case GREATER:
-            value = value1 > value2;
-            break;
-        case GREATEREQUAL:
-            value = value1 >= value2;
-            break;
-        case EQUAL:
-            value = value1 == value2;
-            break;
-        case NOTEQUAL:
-            value = value1 != value2;
-            break;
-        }
-        return value;
-    }
-    else // 如果最终结果为int，那么其实两个操作数类型都是int，没啥精度问题，直接算
-    {
-        switch (op)
-        {
+    // 这里有点坑，不能用double类型存储，不然196float过不了，有精度问题，只能用float
+    float value = 0;
+    float value1 = expr1->getValue();
+    float value2 = expr2->getValue();
+    switch (op) {
         case ADD:
             value = value1 + value2;
             break;
@@ -199,7 +158,10 @@ double BinaryExpr::getValue()
             value = value1 / value2;
             break;
         case MOD:
-            value = (int)value1 % (int)value2;
+            if (type->isFloat()) ;
+                // do nothing, because float % float is not allowed
+            else
+                value = (int)value1 % (int)value2;
             break;
         case AND:
             value = value1 && value2;
@@ -225,15 +187,13 @@ double BinaryExpr::getValue()
         case NOTEQUAL:
             value = value1 != value2;
             break;
-        }
     }
     return value;
 }
 
-UnaryExpr::UnaryExpr(SymbolEntry *se, int op, ExprNode *expr) : ExprNode(se), op(op), expr(expr)
+UnaryExpr::UnaryExpr(SymbolEntry *se, int op, ExprNode *expr) 
+    : ExprNode(se, UNARYEXPR), op(op), expr(expr)
 {
-    this->dst = new Operand(se);
-    this->type = se->getType();
     std::string op_str;
     switch (op)
     {
@@ -244,19 +204,13 @@ UnaryExpr::UnaryExpr(SymbolEntry *se, int op, ExprNode *expr) : ExprNode(se), op
         op_str = "-";
         break;
     }
-    if (expr->getType()->isVoid())
-    {
-        fprintf(stderr, "invalid operand of type \'void\' to unary \'opeartor%s\'\n", op_str.c_str());
+    if (op_str == "!"){
+        this->dst = new Operand(se);
+        this->type = se->getType();
     }
-    if (op == UnaryExpr::NOT)
-    {
-        // if (expr->getType()->isInt())
-        // {
-        //     this->expr = new ImplictCastExpr(expr);
-        // }
-    }
-    else if (op == UnaryExpr::SUB)
-    {
+    else if (op_str == "-"){
+        this->dst = new Operand(se);
+        this->type = se->getType();
         if (expr->getType()->isBool())
         {
             this->expr = new ImplictCastExpr(expr, ImplictCastExpr::BTI);
@@ -266,63 +220,53 @@ UnaryExpr::UnaryExpr(SymbolEntry *se, int op, ExprNode *expr) : ExprNode(se), op
 
 double UnaryExpr::getValue()
 {
-    double value = expr->getValue();
-    switch (op)
-    {
-    case NOT:
-        value = (!value);
-        break;
-    case SUB:
-        // 这里不用考虑精度，取负数就是符号位变一下
-        value = (-value);
-        break;
-    }
+    float value = expr->getValue();
+    if (op == UnaryExpr::NOT)
+        value = !value;
+    else if (op == UnaryExpr::SUB)
+        value = -value;
+
     return value;
 }
 
 double Constant::getValue()
 {
-    return ((ConstantSymbolEntry *)symbolEntry)->getValue();
+    double value = dynamic_cast<ConstantSymbolEntry* >(symbolEntry)->getValue();
+    return value;
 }
 
 double Id::getValue()
 {
-    return ((IdentifierSymbolEntry *)symbolEntry)->getValue();
+    double value = dynamic_cast<IdentifierSymbolEntry* >(symbolEntry)->getValue();
+    return value;
 }
 
-CallExpr::CallExpr(SymbolEntry *se, ExprNode *param) : ExprNode(se)
+CallExpr::CallExpr(SymbolEntry *se, ExprNode *param) : ExprNode(se), param(param)
 {
-    dst = nullptr;
     // 统计实参数量
-    unsigned long int paramCnt = 0;
-    ExprNode *temp = param;
-    while (temp)
-    {
+    int paramCnt = 0;
+    dst = nullptr;
+    // 获取参数个数
+    for (ExprNode* temp = param; temp; temp = dynamic_cast<ExprNode*>(temp->getNext())) {
         params.push_back(temp);
         paramCnt++;
-        temp = (ExprNode *)(temp->getNext());
     }
-    // 由于存在函数重载的情况，这里我们提前将重载的函数通过符号表项的next指针连接，这里需要根据实参个数判断对应哪一个具体函数，找到其对应得符号表项
-    SymbolEntry *s = se;
+    // 由于存在函数重载的情况，这里我们提前将重载的函数通过符号表项的next指针连接
+    // 这里需要根据实参个数判断对应哪一个具体函数，找到其对应得符号表项
     Type *type;
     std::vector<Type *> FParams;
-    while (s)
-    {
-        type = s->getType();
-        FParams = ((FunctionType *)type)->getParamsType();
-        if (paramCnt == FParams.size())
-        {
-            this->symbolEntry = s;
+    for (SymbolEntry* tempSe = se; tempSe; tempSe = tempSe->getNext()) {
+        type = tempSe->getType();
+        FParams = dynamic_cast<FunctionType*>(type)->getParamsType();
+        if (paramCnt == FParams.size()) {
+            this->symbolEntry = tempSe;
             break;
         }
-        s = s->getNext();
     }
-    if (symbolEntry)
-    {
+    if (symbolEntry) {
         // 如果函数返回值类型不为空，需要存储返回结果
-        this->type = ((FunctionType *)type)->getRetType();
-        if (this->type != TypeSystem::voidType)
-        {
+        this->type = dynamic_cast<FunctionType* >(type)->getRetType();
+        if (this->type != TypeSystem::voidType) {
             SymbolEntry *se = new TemporarySymbolEntry(this->type, SymbolTable::getLabel());
             dst = new Operand(se);
         }
@@ -354,8 +298,7 @@ CallExpr::CallExpr(SymbolEntry *se, ExprNode *param) : ExprNode(se)
             }
         }
     }
-    else
-    {
+    else{
         fprintf(stderr, "function is undefined\n");
     }
     if (((IdentifierSymbolEntry *)se)->isSysy())
@@ -1208,18 +1151,20 @@ void UnaryExpr::output(int level)
 
 void CallExpr::output(int level)
 {
-    std::string name, type;
-    int scope;
     if (symbolEntry)
     {
-        name = symbolEntry->toStr();
-        type = symbolEntry->getType()->toStr();
-        scope = dynamic_cast<IdentifierSymbolEntry *>(symbolEntry)->getScope();
+        std::string name = symbolEntry->toStr();
+        std::string type = symbolEntry->getType()->toStr();
+        int scope = dynamic_cast<IdentifierSymbolEntry *>(symbolEntry)->getScope();
         fprintf(yyout, "%*cCallExpr\tfunction name: %s\tscope: %d\ttype: %s\n", level, ' ', name.c_str(), scope, type.c_str());
         // 打印参数信息
-        for (auto param : params)
-        {
-            param->output(level + 4);
+        Node* temp = param;
+        while (1) {
+            if(temp==nullptr){
+                break;
+            }
+            temp->output(level + 4);
+            temp = temp->getNext();
         }
     }
 }

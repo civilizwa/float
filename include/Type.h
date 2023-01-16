@@ -68,11 +68,14 @@ public:
 class FunctionType : public Type
 {
 private:
-    Type *returnType;
-    std::vector<Type *> paramsType;
-
+    Type *returnType; // 函数返回值类型
+    std::vector<Type *> paramsType; // 函数参数类型
+    int paranum; // 函数参数个数
 public:
-    FunctionType(Type *returnType, std::vector<Type *> paramsType) : Type(Type::FUNC), returnType(returnType), paramsType(paramsType){};
+    FunctionType(Type *returnType, std::vector<Type *> paramsType)
+         : Type(Type::FUNC), returnType(returnType), paramsType(paramsType){};
+    FunctionType(Type* returnType, std::vector<Type*> paramsType, int paranum)
+         : Type(Type::FUNC), returnType(returnType), paramsType(paramsType), paranum(paranum){};
     Type *getRetType() { return returnType; };
     void setParamsType(std::vector<Type *> paramsType)
     {

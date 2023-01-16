@@ -819,7 +819,7 @@ void MachineUnit::printLTORG()
     // 打印文字池
     if (global_vars.size() > 0)
     {
-        fprintf(yyout, "\n.LTORG\n");
+        fprintf(yyout, "\n.LTORG\n");//.LTORG: 用于标记文字池的开始
         for (auto se : global_vars)
         {
             fprintf(yyout, "addr_%s_%d:\n", se->toStr().c_str() + 1, ltorg_num);
@@ -843,5 +843,5 @@ void MachineUnit::output()
     fprintf(yyout, "\n\t.text\n");
     for (auto iter : func_list)
         iter->output();
-    printLTORG();
+    printLTORG();//最后要输出全局变量标签信息
 }
