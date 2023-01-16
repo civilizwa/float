@@ -47,17 +47,18 @@ private:
     int kind;
 protected:
     enum { EXPR, IMPLICTCASTEXPR, UNARYEXPR };
-    bool isCond;
+    
     SymbolEntry *symbolEntry;
     Operand *dst; // The result of the subtree is stored into dst.
     Type *type;
     bool isFir = 1;
 public:
-    ExprNode(SymbolEntry *symbolEntry, int kind = EXPR) : kind(kind), symbolEntry(symbolEntry), isCond(false){};
+    ExprNode(SymbolEntry *symbolEntry, int kind = EXPR) : kind(kind), symbolEntry(symbolEntry), isBr(false){};
     Operand *getOperand() { return dst; };
     SymbolEntry *getSymPtr() { return symbolEntry; };
-    bool isConde() const { return isCond; };
-    void setIsCond(bool isCond) { this->isCond = isCond; };
+    bool isBr;
+    // bool isConde() const { return isCond; };
+    // void setIsCond(bool isCond) { this->isCond = isCond; };
     void output(int level);
     void genCode(){};
     void typeCheck(){};
@@ -219,11 +220,11 @@ public:
             break;
         }
         dst = new Operand(new TemporarySymbolEntry(type, SymbolTable::getLabel()));
-        if (expr->isConde())
+        if (expr->isBr)
         {
             //将隐式转换后的表达式设置为条件表达式，原表达式取消
-            expr->setIsCond(false);
-            this->isCond = true;
+            expr->isBr=false;
+            this->isBr = true;
         }
     };
     double getValue();

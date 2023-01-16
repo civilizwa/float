@@ -490,10 +490,10 @@ void BinaryExpr::genCode()
 {
     if (op == AND)
     {
-        if (this->isConde())
+        if (this->isBr)
         {
-            expr1->setIsCond(true);
-            expr2->setIsCond(true);
+            expr1->isBr=true;
+            expr2->isBr=true;
         }
         BasicBlock *expr2BB = new BasicBlock(builder->getInsertBB()->getParent()); // if the result of lhs is true, jump to the trueBB.
         expr1->genCode();
@@ -506,10 +506,10 @@ void BinaryExpr::genCode()
     else if (op == OR)
     {
         // Todo
-        if (this->isConde())
+        if (this->isBr)
         {
-            expr1->setIsCond(true);
-            expr2->setIsCond(true);
+            expr1->isBr=true;
+            expr2->isBr=true;
         }
         BasicBlock *expr2BB = new BasicBlock(builder->getInsertBB()->getParent());
         expr1->genCode();
@@ -557,7 +557,7 @@ void BinaryExpr::genCode()
         interB:
         b false
         */
-        if (this->isConde())
+        if (this->isBr)
         {
             BasicBlock *interB;
             interB = new BasicBlock(builder->getInsertBB()->getParent());
@@ -598,7 +598,7 @@ void UnaryExpr::genCode()
         {
             new XorInstruction(dst, expr->getOperand(), builder->getInsertBB());
         }
-        if (isCond)
+        if (isBr)
         {
             BasicBlock *interB;
             interB = new BasicBlock(builder->getInsertBB()->getParent());
@@ -712,7 +712,7 @@ void ImplictCastExpr::genCode()
         new ZextInstruction(internal_op, expr->getOperand(), true, builder->getInsertBB());
         new I2FInstruction(dst, internal_op, builder->getInsertBB());
     }
-    if (this->isCond)
+    if (this->isBr)
     {
         //如果是条件语句，需要分别开辟true和false块
         BasicBlock *interB;
