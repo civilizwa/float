@@ -35,22 +35,25 @@ public:
     virtual void output(int level) = 0;
     virtual void typeCheck() = 0;
     virtual void genCode() = 0;
-    std::vector<Instruction *> &trueList() { return true_list; }
-    std::vector<Instruction *> &falseList() { return false_list; }
     void setNext(Node *node);
     Node *getNext() { return next; }
+    std::vector<Instruction *> &trueList() { return true_list; }
+    std::vector<Instruction *> &falseList() { return false_list; }
 };
 
 class ExprNode : public Node
 {
+private:
+    int kind;
 protected:
+    enum { EXPR, IMPLICTCASTEXPR, UNARYEXPR };
     bool isCond;
     SymbolEntry *symbolEntry;
     Operand *dst; // The result of the subtree is stored into dst.
     Type *type;
-
+    bool isFir = 1;
 public:
-    ExprNode(SymbolEntry *symbolEntry) : symbolEntry(symbolEntry), isCond(false){};
+    ExprNode(SymbolEntry *symbolEntry, int kind = EXPR) : kind(kind), symbolEntry(symbolEntry), isCond(false){};
     Operand *getOperand() { return dst; };
     SymbolEntry *getSymPtr() { return symbolEntry; };
     bool isConde() const { return isCond; };
@@ -60,6 +63,12 @@ public:
     void typeCheck(){};
     virtual double getValue() { return -1; };
     virtual Type *getType() { return type; };
+    bool IsFir(){ return isFir; };
+    void setnotfir(){ isFir = 0; };
+    void setOperand(Operand* op){ dst = op; }; 
+    bool isExpr() const { return kind == EXPR; };
+    bool isImplictCastExpr() const { return kind == IMPLICTCASTEXPR; };
+    bool isUnaryExpr() const { return kind == UNARYEXPR; };
 };
 
 class BinaryExpr : public ExprNode
@@ -69,22 +78,7 @@ private:
     ExprNode *expr1, *expr2;
 
 public:
-    enum
-    {
-        ADD,
-        SUB,
-        MUL,
-        DIV,
-        MOD,
-        AND,
-        OR,
-        LESS,
-        LESSEQUAL,
-        GREATER,
-        GREATEREQUAL,
-        EQUAL,
-        NOTEQUAL
-    };
+    enum{ADD, SUB, MUL, DIV, MOD, AND, OR, LESS, LESSEQUAL, GREATER, GREATEREQUAL, EQUAL, NOTEQUAL};
     BinaryExpr(SymbolEntry *se, int op, ExprNode *expr1, ExprNode *expr2);
     void output(int level);
     double getValue();
@@ -99,16 +93,13 @@ private:
     ExprNode *expr;
 
 public:
-    enum
-    {
-        NOT,
-        SUB
-    };
+    enum{ NOT, SUB, ADD};
     UnaryExpr(SymbolEntry *se, int op, ExprNode *expr);
     void output(int level);
     double getValue();
     void typeCheck();
     void genCode();
+    void setType(Type* type) { this->type = type; }
 };
 
 class CallExpr : public ExprNode
@@ -127,8 +118,7 @@ public:
 class Constant : public ExprNode
 {
 public:
-    Constant(SymbolEntry *se) : ExprNode(se)
-    {
+    Constant(SymbolEntry *se) : ExprNode(se) {
         dst = new Operand(se);
         type = se->getType();
     };
@@ -145,74 +135,44 @@ private:
     bool isPointer = false;
 
 public:
-    Id(SymbolEntry *se, ExprNode *index = nullptr) : ExprNode(se), index(index)
-    {
+    Id(SymbolEntry *se, ExprNode *index = nullptr) : ExprNode(se), index(index) {
         this->type = se->getType();
-        if (se->getType()->isArray())
-        {
-            std::vector<int> indexs = ((ArrayType *)se->getType())->getIndexs();
-            SymbolEntry *temp;
-            ExprNode *expr = index;
-            while (expr)
-            {
-                expr = (ExprNode *)expr->getNext();
-                indexs.erase(indexs.begin());
+        ArrayType* arrType;
+        if (se->getType()->isArray()) {
+            std::vector<int> indexs = dynamic_cast<ArrayType* >(se->getType())->getIndexs();
+            for (ExprNode *expr = index; expr; expr = dynamic_cast<ExprNode* >(expr->getNext()))
+                indexs.erase(indexs.begin()); // 删除数组的当前第一个维度
+            if (indexs.size() <= 0) { 
+                // 如果索引和数组定义时候的维度一致，是引用某个数组元素
+                arrType = dynamic_cast<ArrayType* >(se->getType());
+                goto judge;
             }
-            if (indexs.size() <= 0)
-            { // 如果索引和数组定义时候的维度一致，是引用某个数组元素
-                if (((ArrayType *)se->getType())->getBaseType()->isInt())
-                {
-                    this->type = TypeSystem::intType;
-                    temp = new TemporarySymbolEntry(TypeSystem::intType, SymbolTable::getLabel());
-                }
-                else if (((ArrayType *)se->getType())->getBaseType()->isFloat())
-                {
-                    this->type = TypeSystem::floatType;
-                    temp = new TemporarySymbolEntry(TypeSystem::floatType, SymbolTable::getLabel());
-                }
-            }
-            else
-            { // 索引个数小于数组定义时候的维度，应该作为函数参数传递，传递的是一个指针
+            else{ 
+                // 索引个数小于数组定义时候的维度，应该作为函数实参传递，传递的是一个指针
+                // indexs.erase(indexs.begin());
                 isPointer = true;
-                indexs.erase(indexs.begin());
-                if (((ArrayType *)se->getType())->getBaseType()->isInt())
-                    this->type = new PointerType(new ArrayType(indexs, TypeSystem::intType));
-                else if (((ArrayType *)se->getType())->getBaseType()->isFloat())
-                    this->type = new PointerType(new ArrayType(indexs, TypeSystem::floatType));
-                temp = new TemporarySymbolEntry(this->type, SymbolTable::getLabel());
-            }
-            dst = new Operand(temp);
-        }
-        else if (se->getType()->isPtr())
-        {
-            ArrayType *arrType = (ArrayType *)((PointerType *)se->getType())->getType();
-            SymbolEntry *temp;
-            if (index == nullptr)
-            {
-                this->type = se->getType();
-                temp = new TemporarySymbolEntry(se->getType(), SymbolTable::getLabel());
-            }
-            else
-            {
+                arrType = dynamic_cast<ArrayType* >(se->getType());
                 if (arrType->getBaseType()->isInt())
-                {
-                    this->type = TypeSystem::intType;
-                    temp = new TemporarySymbolEntry(TypeSystem::intType, SymbolTable::getLabel());
-                }
+                    this->type = new PointerType(new ArrayType(indexs, TypeSystem::intType));
                 else if (arrType->getBaseType()->isFloat())
-                {
-                    this->type = TypeSystem::floatType;
-                    temp = new TemporarySymbolEntry(TypeSystem::floatType, SymbolTable::getLabel());
-                }
+                    this->type = new PointerType(new ArrayType(indexs, TypeSystem::floatType));
             }
-            dst = new Operand(temp);
+        }
+        else if (se->getType()->isPtr()) {
+            arrType = dynamic_cast<ArrayType* >((dynamic_cast<PointerType* >(se->getType()))->getType());
+            if (index == nullptr) // 单纯就是指针类型
+                this->type = se->getType();
+            else { // 函数形参
+                judge :
+                if (arrType->getBaseType()->isInt()) 
+                    this->type = TypeSystem::intType;
+                else if (arrType->getBaseType()->isFloat()) 
+                    this->type = TypeSystem::floatType;
+            }
         }
         else
-        {
             this->type = se->getType();
-            SymbolEntry *temp = new TemporarySymbolEntry(this->type, SymbolTable::getLabel());
-            dst = new Operand(temp);
-        }
+        dst = new Operand(new TemporarySymbolEntry(this->type, SymbolTable::getLabel()));
     };
     void output(int level);
     void typeCheck();
@@ -239,8 +199,7 @@ public:
         FTB  // float转bool
     };
     // bool b2i = false
-    ImplictCastExpr(ExprNode *expr, int op) : ExprNode(nullptr), expr(expr), op(op)
-    {
+    ImplictCastExpr(ExprNode *expr, int op) : ExprNode(nullptr), expr(expr), op(op) {
         switch (op)
         {
         case ITB:

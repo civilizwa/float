@@ -124,11 +124,10 @@ private:
     Type *baseType;
 
 public:
-    ArrayType(std::vector<int> indexs, Type *baseType = TypeSystem::intType) : Type(Type::ARRAY), indexs(indexs), baseType(baseType)
-    {
+    ArrayType(std::vector<int> indexs, Type *baseType = TypeSystem::intType) 
+        : Type(Type::ARRAY), indexs(indexs), baseType(baseType){
         this->size = 1;
-        for (auto index : indexs)
-        {
+        for (auto index : indexs){
             this->size *= index;
         }
         this->size *= 32;
