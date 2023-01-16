@@ -395,10 +395,10 @@ void BinaryExpr::genCode()
 {
     if (op == AND)
     {
-        if (this->isConde())
+        if (this->isBr)
         {
-            expr1->setIsCond(true);
-            expr2->setIsCond(true);
+            expr1->isBr=true;
+            expr2->isBr=true;
         }
         BasicBlock *expr2BB = new BasicBlock(builder->getInsertBB()->getParent()); // if the result of lhs is true, jump to the trueBB.
         expr1->genCode();
@@ -411,10 +411,10 @@ void BinaryExpr::genCode()
     else if (op == OR)
     {
         // Todo
-        if (this->isConde())
+        if (this->isBr)
         {
-            expr1->setIsCond(true);
-            expr2->setIsCond(true);
+            expr1->isBr=true;
+            expr2->isBr=true;
         }
         BasicBlock *expr2BB = new BasicBlock(builder->getInsertBB()->getParent());
         expr1->genCode();
@@ -429,8 +429,32 @@ void BinaryExpr::genCode()
         // Todo
         expr1->genCode();
         expr2->genCode();
-        int cmpOps[] = {CmpInstruction::L, CmpInstruction::LE, CmpInstruction::G, CmpInstruction::GE, CmpInstruction::E, CmpInstruction::NE};
-        new CmpInstruction(cmpOps[op - LESS], dst, expr1->getOperand(), expr2->getOperand(), builder->getInsertBB());
+        int Cmp_opcode;
+        //生成比较指令   //可以换成switch, , , EQUAL, NOTEQUAL
+        switch(op){
+            case LESS:
+                Cmp_opcode=CmpInstruction::L;
+                break;
+            case LESSEQUAL:
+                Cmp_opcode=CmpInstruction::LE;
+                break;
+            case GREATER:
+                Cmp_opcode=CmpInstruction::G;
+                break;
+            case GREATEREQUAL:
+                Cmp_opcode=CmpInstruction::GE;
+                break;
+            case EQUAL:
+                Cmp_opcode=CmpInstruction::E;
+                break;
+            case NOTEQUAL:
+                Cmp_opcode=CmpInstruction::NE;
+                break;
+            default:
+                break;
+        }
+        //int cmpOps[] = {CmpInstruction::L, CmpInstruction::LE, CmpInstruction::G, CmpInstruction::GE, CmpInstruction::E, CmpInstruction::NE};
+        new CmpInstruction(Cmp_opcode, dst, expr1->getOperand(), expr2->getOperand(), builder->getInsertBB());
         /* true和false未知，interB已知
         cmp
         br true, interB
@@ -438,7 +462,7 @@ void BinaryExpr::genCode()
         interB:
         b false
         */
-        if (this->isConde())
+        if (this->isBr)
         {
             BasicBlock *interB;
             interB = new BasicBlock(builder->getInsertBB()->getParent());
@@ -479,7 +503,7 @@ void UnaryExpr::genCode()
         {
             new XorInstruction(dst, expr->getOperand(), builder->getInsertBB());
         }
-        if (isCond)
+        if (isBr)
         {
             BasicBlock *interB;
             interB = new BasicBlock(builder->getInsertBB()->getParent());
@@ -593,7 +617,7 @@ void ImplictCastExpr::genCode()
         new ZextInstruction(internal_op, expr->getOperand(), true, builder->getInsertBB());
         new I2FInstruction(dst, internal_op, builder->getInsertBB());
     }
-    if (this->isCond)
+    if (this->isBr)
     {
         //如果是条件语句，需要分别开辟true和false块
         BasicBlock *interB;

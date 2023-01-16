@@ -127,17 +127,17 @@ BlockStmt
     ;
 IfStmt
     : IF LPAREN Cond RPAREN Stmt %prec THEN {
-        ((ExprNode*)$3)->setIsCond(true);
+        //((ExprNode*)$3)->isBr=true;
         $$ = new IfStmt($3, $5);
     }
     | IF LPAREN Cond RPAREN Stmt ELSE Stmt {
-        ((ExprNode*)$3)->setIsCond(true);
+        //((ExprNode*)$3)->isBr=true;
         $$ = new IfElseStmt($3, $5, $7);
     }
     ;
 WhileStmt
     : WHILE LPAREN Cond RPAREN {
-        ((ExprNode*)$3)->setIsCond(true);
+        //((ExprNode*)$3)->isBr=true;
         StmtNode *whileStmt = new WhileStmt($3);
         whileStack.push(whileStmt);
     } Stmt {
@@ -180,7 +180,7 @@ Exp
     ;
 Cond
     :
-    LOrExp {$$ = $1;}
+    LOrExp {$$ = $1;$$->isBr=true;}
     ;
 PrimaryExp
     : LPAREN Exp RPAREN {
