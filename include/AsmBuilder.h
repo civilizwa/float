@@ -3,6 +3,8 @@
 
 #include "MachineCode.h"
 
+/*AsmBuilder.h 中为汇编代码构造辅助类。其主要作用就是在中间代码向目标代码进行自顶向下
+的转换时，记录当前正在进行转换操作的对象，以进行函数、基本块及指令的插入。*/
 class AsmBuilder
 {
 private:
@@ -19,8 +21,7 @@ public:
     MachineFunction *getFunction() { return this->mFunction; };
     MachineBlock *getBlock() { return this->mBlock; };
     int getCmpOpcode() { return this->cmpOpcode; };
-    static bool isLegalImm(int imm)
-    {
+    static bool isLegalImm(int imm) {
         /*1.如十六进制数在0x00到0xFF之间，则它一定是合法的
 
          2.若十六进制数>0XFF则将十六进制的数转化成十进制
@@ -31,12 +32,9 @@ public:
         原文链接：https://blog.csdn.net/sinat_41104353/article/details/83097466
          */
         unsigned int num = (unsigned int)imm;
-        for (int i = 0; i < 16; i++)
-        {
-            if (num <= 0xff)
-            {
-                return true;
-            }
+        for (int i = 0; i < 16; i++) {
+            if (num <= 0xff)           
+                return true;            
             num = ((num << 2) | (num >> 30));
         }
         return false;

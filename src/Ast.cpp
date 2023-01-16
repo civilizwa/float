@@ -1345,18 +1345,6 @@ void SeqNode::output(int level)
     stmt2->output(level);
 }
 
-DeclStmt::DeclStmt(Id *id, ExprNode *expr) : id(id), expr(expr)
-{
-    this->exprArray = nullptr;
-    if (expr)
-    {
-        if (id->getType()->isFloat() && expr->getType()->isInt())
-            this->expr = new ImplictCastExpr(expr, ImplictCastExpr::ITF);
-        if (id->getType()->isInt() && expr->getType()->isFloat())
-            this->expr = new ImplictCastExpr(expr, ImplictCastExpr::FTI);
-    }
-};
-
 void DeclStmt::output(int level)
 {
     fprintf(yyout, "%*cDeclStmt\n", level, ' ');

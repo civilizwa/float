@@ -200,7 +200,7 @@ public:
         FTB  // float转bool
     };
     // bool b2i = false
-    ImplictCastExpr(ExprNode *expr, int op) : ExprNode(nullptr), expr(expr), op(op) {
+    ImplictCastExpr(ExprNode *expr, int op) : ExprNode(nullptr, IMPLICTCASTEXPR), expr(expr), op(op) {
         switch (op)
         {
         case ITB:
@@ -239,14 +239,7 @@ private:
     int kind;
 
 protected:
-    enum
-    {
-        IF,
-        IFELSE,
-        WHILE,
-        COMPOUND,
-        RETURN
-    };
+    enum { IF, IFELSE, WHILE, COMPOUND, RETURN };
 
 public:
     StmtNode(int kind = -1) : kind(kind){};
@@ -287,7 +280,16 @@ private:
     ExprNode **exprArray; // 当Id是个数组的时候，这个东西用来存数据的初始值吧
 
 public:
-    DeclStmt(Id *id, ExprNode *expr = nullptr);
+    DeclStmt(Id *id, ExprNode *expr = nullptr) : id(id), expr(expr) {
+        this->exprArray = nullptr;
+        if (expr) {
+            // 根据id的类型和expr的类型来判断是否需要隐式转换，以id的类型为准
+            if (id->getType()->isFloat() && expr->getType()->isInt())
+                this->expr = new ImplictCastExpr(expr, ImplictCastExpr::ITF);
+            if (id->getType()->isInt() && expr->getType()->isFloat())
+                this->expr = new ImplictCastExpr(expr, ImplictCastExpr::FTI);
+        }
+    };
     void output(int level);
     void typeCheck();
     void genCode();
@@ -298,7 +300,7 @@ public:
 class BlankStmt : public StmtNode
 {
 public:
-    BlankStmt(){};
+    BlankStmt(){}; // do nothing
     void output(int level);
     void typeCheck(){};
     void genCode();
@@ -311,7 +313,13 @@ private:
     StmtNode *thenStmt;
 
 public:
-    IfStmt(ExprNode *cond, StmtNode *thenStmt);
+    IfStmt(ExprNode *cond, StmtNode *thenStmt) : cond(cond), thenStmt(thenStmt) {
+        // cond必须是bool类型的
+        if (cond->getType()->isInt())
+            this->cond = new ImplictCastExpr(cond, ImplictCastExpr::ITB);
+        else if (cond->getType()->isFloat())
+            this->cond = new ImplictCastExpr(cond, ImplictCastExpr::FTB);
+    };
     void output(int level);
     void typeCheck();
     void genCode();
@@ -325,7 +333,14 @@ private:
     StmtNode *elseStmt;
 
 public:
-    IfElseStmt(ExprNode *cond, StmtNode *thenStmt, StmtNode *elseStmt);
+    IfElseStmt(ExprNode *cond, StmtNode *thenStmt, StmtNode *elseStmt) 
+        : cond(cond), thenStmt(thenStmt), elseStmt(elseStmt) {
+        // cond必须是bool类型的
+        if (cond->getType()->isInt())
+            this->cond = new ImplictCastExpr(cond, ImplictCastExpr::ITB);
+        else if (cond->getType()->isFloat())
+            this->cond = new ImplictCastExpr(cond, ImplictCastExpr::FTB);
+    };
     void output(int level);
     void typeCheck();
     void genCode();
@@ -340,7 +355,13 @@ private:
     BasicBlock *end_bb;
 
 public:
-    WhileStmt(ExprNode *cond, StmtNode *stmt = nullptr);
+    WhileStmt(ExprNode *cond, StmtNode *stmt = nullptr) : cond(cond), stmt(stmt) {
+        // cond必须是bool类型的
+        if (cond->getType()->isInt())
+            this->cond = new ImplictCastExpr(cond, ImplictCastExpr::ITB);
+        else if (cond->getType()->isFloat())
+            this->cond = new ImplictCastExpr(cond, ImplictCastExpr::FTB);
+    };
     void setStmt(StmtNode *stmt) { this->stmt = stmt; };
     void output(int level);
     void typeCheck();
@@ -355,7 +376,9 @@ private:
     StmtNode *whileStmt;
 
 public:
-    BreakStmt(StmtNode *whileStmt);
+    BreakStmt(StmtNode *whileStmt) {
+        this->whileStmt = whileStmt;
+    }
     void output(int level);
     void typeCheck(){};
     void genCode();
@@ -367,7 +390,9 @@ private:
     StmtNode *whileStmt;
 
 public:
-    ContinueStmt(StmtNode *whileStmt);
+    ContinueStmt(StmtNode *whileStmt) {
+        this->whileStmt = whileStmt;
+    }
     void output(int level);
     void typeCheck(){};
     void genCode();
@@ -379,7 +404,20 @@ private:
     ExprNode *retValue;
 
 public:
-    ReturnStmt(ExprNode *retValue = nullptr, Type *funcRetType = nullptr);
+    ReturnStmt(ExprNode *retValue = nullptr, Type *funcRetType = nullptr) 
+        : retValue(retValue) {
+        // 判断返回值和函数返回值是否一致
+        Type *retType;
+        if (retValue == nullptr)
+            retType = TypeSystem::voidType;
+        else
+            retType = retValue->getType();
+        // 如果不一致，进行隐式转换
+        if (funcRetType->isFloat() && retType->isInt())
+            this->retValue = new ImplictCastExpr(this->retValue, ImplictCastExpr::ITF);
+        else if (funcRetType->isInt() && retType->isFloat())
+            this->retValue = new ImplictCastExpr(this->retValue, ImplictCastExpr::FTI);
+    }
     void output(int level);
     void typeCheck();
     void genCode();
@@ -392,7 +430,14 @@ private:
     ExprNode *expr;
 
 public:
-    AssignStmt(ExprNode *lval, ExprNode *expr);
+    AssignStmt(ExprNode *lval, ExprNode *expr) : lval(lval), expr(expr) {
+        Type *type = dynamic_cast<Id* >(lval)->getType();
+        // 如果不一致，进行隐式转换
+        if (type->isInt() && expr->getType()->isFloat())
+            this->expr = new ImplictCastExpr(this->expr, ImplictCastExpr::FTI);
+        else if (type->isFloat() && expr->getType()->isInt()) 
+            this->expr = new ImplictCastExpr(this->expr, ImplictCastExpr::ITF);
+    }
     void output(int level);
     void typeCheck();
     void genCode();
@@ -404,7 +449,7 @@ private:
     ExprNode *expr;
 
 public:
-    ExprStmt(ExprNode *expr) : expr(expr){};
+    ExprStmt(ExprNode *expr) : expr(expr) {};
     void output(int level);
     void typeCheck();
     void genCode();
@@ -414,15 +459,21 @@ class FunctionDef : public StmtNode
 {
 private:
     SymbolEntry *se;
+    // 参数的定义 next连接
     DeclStmt *decl;
     StmtNode *stmt;
 
 public:
     FunctionDef(SymbolEntry *se, DeclStmt *decl, StmtNode *stmt) : se(se), decl(decl), stmt(stmt){};
+    FunctionDef(SymbolEntry* se, StmtNode* decl) : se(se), stmt(decl){};
+    FunctionDef(Id* id, StmtNode* decl, StmtNode* stmt) : se(id->getSymPtr()), decl((DeclStmt*)decl), stmt(stmt){};
     void output(int level);
     void typeCheck();
     void genCode();
+    void setStmt(StmtNode *stmt) { this->stmt = stmt; };
+    void setSymbolEntry(SymbolEntry* se){ this->se = se;};
     SymbolEntry *getSymbolEntry() { return se; };
+    DeclStmt* getDecl() { return decl; };
 };
 
 class Ast

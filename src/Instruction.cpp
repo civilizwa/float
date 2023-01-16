@@ -7,6 +7,7 @@
 #include "Function.h"
 #include "Type.h"
 #include "MachineCode.h"
+using namespace std;
 extern FILE *yyout;
 
 Instruction::Instruction(unsigned instType, BasicBlock *insert_bb)
@@ -56,7 +57,8 @@ Instruction *Instruction::getPrev()
     return prev;
 }
 
-AllocaInstruction::AllocaInstruction(Operand *dst, SymbolEntry *se, BasicBlock *insert_bb) : Instruction(ALLOCA, insert_bb)
+AllocaInstruction::AllocaInstruction(Operand *dst, SymbolEntry *se, BasicBlock *insert_bb)
+     : Instruction(ALLOCA, insert_bb)
 {
     operands.push_back(dst);
     dst->setDef(this);
@@ -72,10 +74,18 @@ AllocaInstruction::~AllocaInstruction()
 
 void AllocaInstruction::output() const
 {
-    std::string dst, type;
-    dst = operands[0]->toStr();
-    type = se->getType()->toStr();
-    fprintf(yyout, "  %s = alloca %s, align 4\n", dst.c_str(), type.c_str());
+    string dst = operands[0]->toStr();
+    string type;
+    if (se->getType()->isInt()) {
+        type = se->getType()->toStr();
+        fprintf(yyout, "  %s = alloca %s, align 4\n", dst.c_str(),
+            type.c_str());
+    }
+    else if (se->getType()->isArray()) {
+        type = se->getType()->toStr();
+        fprintf(yyout, "  %s = alloca %s, align 4\n", dst.c_str(),
+            type.c_str());
+    }
 }
 
 LoadInstruction::LoadInstruction(Operand *dst, Operand *src_addr, BasicBlock *insert_bb) : Instruction(LOAD, insert_bb)
@@ -105,12 +115,13 @@ void LoadInstruction::output() const
     fprintf(yyout, "  %s = load %s, %s %s, align 4\n", dst.c_str(), dst_type.c_str(), src_type.c_str(), src.c_str());
 }
 
-StoreInstruction::StoreInstruction(Operand *dst_addr, Operand *src, BasicBlock *insert_bb) : Instruction(STORE, insert_bb)
+StoreInstruction::StoreInstruction(Operand *dst_addr, Operand *src, BasicBlock *insert_bb, int paramno) : Instruction(STORE, insert_bb)
 {
     operands.push_back(dst_addr);
     operands.push_back(src);
     dst_addr->addUse(this);
     src->addUse(this);
+    this->paramno = paramno;
 }
 
 StoreInstruction::~StoreInstruction()
@@ -190,6 +201,43 @@ void BinaryInstruction::output() const
         break;
     }
     fprintf(yyout, "  %s = %s %s %s, %s\n", dst.c_str(), op.c_str(), type.c_str(), src1.c_str(), src2.c_str());
+}
+
+UnaryInstruction::UnaryInstruction(unsigned opcode, Operand *dst, Operand *src, BasicBlock *insert_bb) : Instruction(UNARY, insert_bb)
+{
+    this->opcode = opcode;
+    operands.push_back(dst);
+    operands.push_back(src);
+    dst->setDef(this);
+    src->addUse(this);
+}
+
+UnaryInstruction::~UnaryInstruction()
+{
+    operands[0]->setDef(nullptr);
+    if (operands[0]->usersNum() == 0)
+        delete operands[0];
+    operands[1]->removeUse(this);
+}
+
+void UnaryInstruction::output() const
+{
+    string s1 = operands[0]->toStr();
+    string s2 = operands[1]->toStr();
+    string type = operands[1]->getType()->toStr();
+    string op;
+    if(opcode == UnaryInstruction::ADD){
+        op = "add";
+        fprintf(yyout, "  %s = %s %s 0, %s\n", s1.c_str(), op.c_str(), type.c_str(), s2.c_str());
+    }
+    else if(opcode == UnaryInstruction::SUB){
+        op = "sub";
+        fprintf(yyout, "  %s = %s %s 0, %s\n", s1.c_str(), op.c_str(), type.c_str(), s2.c_str());
+    }
+    else if(opcode == UnaryInstruction::NOT){
+        op = "icmp ne";
+        fprintf(yyout, "  %s = %s %s %s, 0\n", s1.c_str(), op.c_str(), type.c_str(), s2.c_str());
+    }
 }
 
 CmpInstruction::CmpInstruction(unsigned opcode, Operand *dst, Operand *src1, Operand *src2, BasicBlock *insert_bb) : Instruction(CMP, insert_bb)
@@ -393,6 +441,13 @@ void XorInstruction::output() const
     fprintf(yyout, "  %s = xor i1 %s, true\n", dst.c_str(), src.c_str());
 }
 
+XorInstruction::~XorInstruction() {
+    operands[0]->setDef(nullptr);
+    if (operands[0]->usersNum() == 0)
+        delete operands[0];
+    operands[1]->removeUse(this);
+}
+
 ZextInstruction::ZextInstruction(Operand *dst, Operand *src, bool b2i, BasicBlock *insert_bb) : Instruction(ZEXT, insert_bb)
 {
     this->b2i = b2i;
@@ -417,6 +472,22 @@ void ZextInstruction::output() const
         fprintf(yyout, "  %s = zext i32 %s to i1\n", dst.c_str(), src.c_str());
     }
 }
+
+ZextInstruction::~ZextInstruction() {
+    operands[0]->setDef(nullptr);
+    if (operands[0]->usersNum() == 0)
+        delete operands[0];
+    operands[1]->removeUse(this);
+}
+
+GepInstruction::~GepInstruction() {
+    operands[0]->setDef(nullptr);
+    if (operands[0]->usersNum() == 0)
+        delete operands[0];
+    operands[1]->removeUse(this);
+    operands[2]->removeUse(this);
+}
+
 MachineOperand *Instruction::genMachineOperand(Operand *ope, AsmBuilder *builder = nullptr)
 {
     auto se = ope->getEntry();
@@ -785,6 +856,50 @@ void BinaryInstruction::genMachineCode(AsmBuilder *builder)
         break;
     }
     cur_block->InsertInst(cur_inst);
+}
+
+//先抄上，之后再改，增加一些浮点数判断(shm抄来的)
+void UnaryInstruction::genMachineCode(AsmBuilder *builder)
+{
+    // TODO
+    auto cur_block = builder->getBlock();
+    MachineInstruction *cur_inst = 0;
+    auto dst = genMachineOperand(operands[0]);
+    auto src = genMachineOperand(operands[1]);
+    int op;
+    auto internal_reg = genMachineVReg();
+    cur_inst = new LoadMInstruction(cur_block, LoadMInstruction::LDR, internal_reg, genMachineImm(0));
+    // cur_inst = new LoadMInstruction(cur_block, internal_reg, genMachineImm(0));
+    cur_block->InsertInst(cur_inst);
+    auto imm0 = new MachineOperand(*internal_reg);
+    switch (opcode)
+    {
+    case ADD:
+        op = BinaryMInstruction::ADD;
+        cur_inst = new BinaryMInstruction(cur_block, op, dst, imm0, src);
+        cur_block->InsertInst(cur_inst);
+        break;
+    case SUB:
+        op = BinaryMInstruction::SUB;
+        cur_inst = new BinaryMInstruction(cur_block, op, dst, new MachineOperand(*imm0), src);
+        cur_block->InsertInst(cur_inst);
+        break;
+    case NOT: // 这里没用到，NOT用的是XOR指令
+        if (src->isImm())
+        {
+            auto internal_reg = genMachineVReg();
+            cur_inst = new LoadMInstruction(cur_block, LoadMInstruction::LDR ,internal_reg, src);
+            cur_block->InsertInst(cur_inst);
+            src = new MachineOperand(*internal_reg);
+        }
+        cur_inst = new CmpMInstruction(cur_block, CmpMInstruction::CMP, src, new MachineOperand(*imm0));
+        cur_block->InsertInst(cur_inst);
+        cur_inst = new MovMInstruction(cur_block, MovMInstruction::MOV, dst, genMachineImm(1), MachineInstruction::NE);
+        cur_block->InsertInst(cur_inst);
+        cur_inst = new MovMInstruction(cur_block, MovMInstruction::MOV, new MachineOperand(*dst), genMachineImm(0), MachineInstruction::EQ);
+        cur_block->InsertInst(cur_inst);
+        break;
+    }
 }
 
 void CmpInstruction::genMachineCode(AsmBuilder *builder)

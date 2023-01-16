@@ -2,10 +2,10 @@
 #define __FUNCTION_H__
 
 #include <vector>
+#include <iostream>
 #include <map>
 #include <set>
 #include <algorithm>
-#include <iostream>
 #include "BasicBlock.h"
 #include "SymbolTable.h"
 #include "AsmBuilder.h"
@@ -23,6 +23,7 @@ private:
     BasicBlock *entry;
     Unit *parent;
     std::vector<Operand *> params; // 存函数的参数
+    bool isleaf = true;
 
 public:
     Function(Unit *, SymbolEntry *);
@@ -39,6 +40,8 @@ public:
     SymbolEntry *getSymPtr() { return sym_ptr; };
     void addParam(Operand *param) { params.push_back(param); }
     void genMachineCode(AsmBuilder *);
+    bool Isleaf(){ return isleaf; };
+    void setUnleaf(){ isleaf = false; };
 };
 
 #endif
