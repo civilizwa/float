@@ -113,11 +113,16 @@ public:
         DIV,
         AND,
         OR,
-        MOD
+        MOD,
+        FADD,
+        FSUB,
+        FMUL,
+        FDIV
     };
 
 private:
-    bool floatVersion;
+    //bool floatVersion;
+    
 };
 
 class CmpInstruction : public Instruction

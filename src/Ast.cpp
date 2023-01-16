@@ -459,7 +459,7 @@ AssignStmt::AssignStmt(ExprNode *lval, ExprNode *expr) : lval(lval), expr(expr)
     }
 }
 
-// -----------只因Code代码区------------------
+// -----------Code代码区------------------
 
 void Node::backPatch(std::vector<Instruction *> &list, BasicBlock *bb)
 {
@@ -569,8 +569,50 @@ void BinaryExpr::genCode()
     {
         expr1->genCode();
         expr2->genCode();
-        int opcodes[] = {BinaryInstruction::ADD, BinaryInstruction::SUB, BinaryInstruction::MUL, BinaryInstruction::DIV, BinaryInstruction::MOD};
-        new BinaryInstruction(opcodes[op - ADD], dst, expr1->getOperand(), expr2->getOperand(), builder->getInsertBB());
+        int instOP;
+        //浮点数，生成浮点类型指令
+        //不存在浮点类型的取模指令
+        if(expr1->getType()->isFloat()||expr2->getType()->isFloat()){
+            switch(op){
+                case ADD:
+                   instOP=BinaryInstruction::FADD;
+                   break;
+                case SUB:
+                   instOP=BinaryInstruction::FSUB;
+                   break;
+                case MUL:
+                   instOP=BinaryInstruction::FMUL;
+                   break;
+                case DIV:
+                   instOP=BinaryInstruction::FDIV;
+                   break;
+                default:
+                   break;
+            }
+        }
+        else{
+            switch(op){
+                case ADD:
+                   instOP=BinaryInstruction::ADD;
+                   break;
+                case SUB:
+                   instOP=BinaryInstruction::SUB;
+                   break;
+                case MUL:
+                   instOP=BinaryInstruction::MUL;
+                   break;
+                case DIV:
+                   instOP=BinaryInstruction::DIV;
+                   break;
+                case MOD:
+                   instOP=BinaryInstruction::MOD;
+                   break;
+                default:
+                   break;
+            }
+        }
+        //int opcodes[] = {BinaryInstruction::ADD, BinaryInstruction::SUB, BinaryInstruction::MUL, BinaryInstruction::DIV, BinaryInstruction::MOD};
+        new BinaryInstruction(instOP, dst, expr1->getOperand(), expr2->getOperand(), builder->getInsertBB());
     }
 }
 
@@ -582,7 +624,7 @@ void UnaryExpr::genCode()
         if (expr->getType()->isInt())
             new BinaryInstruction(BinaryInstruction::SUB, dst, new Operand(new ConstantSymbolEntry(TypeSystem::intType, 0)), expr->getOperand(), builder->getInsertBB());
         else if (expr->getType()->isFloat())
-            new BinaryInstruction(BinaryInstruction::SUB, dst, new Operand(new ConstantSymbolEntry(TypeSystem::floatType, 0)), expr->getOperand(), builder->getInsertBB());
+            new BinaryInstruction(BinaryInstruction::FSUB, dst, new Operand(new ConstantSymbolEntry(TypeSystem::floatType, 0)), expr->getOperand(), builder->getInsertBB());
     }
     else if (op == NOT)
     {
@@ -802,7 +844,12 @@ void DeclStmt::genCode()
             // 因为数组初始化可能会用到很多零，这里我们先准备一个，然后之后就不用频繁load了
             Operand *zeroReg = new Operand(new TemporarySymbolEntry(baseType, SymbolTable::getLabel()));
             Operand *zero = new Operand(new ConstantSymbolEntry(baseType, 0));
-            new BinaryInstruction(BinaryInstruction::ADD, zeroReg, zero, zero, builder->getInsertBB());
+            if(eleType->isFloat()){
+                new BinaryInstruction(BinaryInstruction::FADD, zeroReg, zero, zero, builder->getInsertBB());
+            }
+            else{
+                new BinaryInstruction(BinaryInstruction::ADD, zeroReg, zero, zero, builder->getInsertBB());
+            }
             Operand *ele_addr = new Operand(new TemporarySymbolEntry(new PointerType(new ArrayType({}, baseType)), SymbolTable::getLabel()));
             Operand *step = new Operand(new ConstantSymbolEntry(TypeSystem::intType, 1));
             new GepInstruction(ele_addr, se->getAddr(), offs, builder->getInsertBB());

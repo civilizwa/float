@@ -138,7 +138,7 @@ BinaryInstruction::BinaryInstruction(unsigned opcode, Operand *dst, Operand *src
     dst->setDef(this);
     src1->addUse(this);
     src2->addUse(this);
-    floatVersion = (src1->getType()->isFloat() || src2->getType()->isFloat());
+    //floatVersion = (src1->getType()->isFloat() || src2->getType()->isFloat());
 }
 
 BinaryInstruction::~BinaryInstruction()
@@ -160,16 +160,28 @@ void BinaryInstruction::output() const
     switch (opcode)
     {
     case ADD:
-        op = floatVersion ? "fadd" : "add";
+        op = "add";
         break;
     case SUB:
-        op = floatVersion ? "fsub" : "sub";
+        op = "sub";
         break;
     case MUL:
-        op = floatVersion ? "fmul" : "mul";
+        op = "mul";
         break;
     case DIV:
-        op = floatVersion ? "fdiv" : "sdiv";
+        op = "sdiv";
+        break;
+    case FADD:
+        op = "fadd" ;
+        break;
+    case FSUB:
+        op =  "fsub";
+        break;
+    case FMUL:
+        op = "fmul";
+        break;
+    case FDIV:
+        op = "fdiv" ;
         break;
     case MOD:
         op = "srem";
@@ -675,7 +687,7 @@ void BinaryInstruction::genMachineCode(AsmBuilder *builder)
     if (src1->isImm())
     {
         src1 = new MachineOperand(*immToVReg(src1, cur_block));
-        if (floatVersion)
+        if (this->opcode>=BinaryInstruction::FADD&&this->opcode<=BinaryInstruction::FDIV)
         {
             auto internal_reg = genMachineVReg(true);
             cur_block->InsertInst(new MovMInstruction(cur_block, MovMInstruction::VMOV, internal_reg, src1));
@@ -684,7 +696,7 @@ void BinaryInstruction::genMachineCode(AsmBuilder *builder)
     }
     if (src2->isImm())
     {
-        if (floatVersion) // 如果是浮点数，直接放寄存器里得了
+        if (this->opcode>=BinaryInstruction::FADD&&this->opcode<=BinaryInstruction::FDIV) // 如果是浮点数，直接放寄存器里
         {
             src2 = new MachineOperand(*immToVReg(src2, cur_block));
             auto internal_reg = genMachineVReg(true);
@@ -701,28 +713,28 @@ void BinaryInstruction::genMachineCode(AsmBuilder *builder)
     {
     case ADD:
         cur_inst = new BinaryMInstruction(cur_block,
-                                          floatVersion ? BinaryMInstruction::VADD : BinaryMInstruction::ADD,
+                                          BinaryMInstruction::ADD,
                                           dst,
                                           src1,
                                           src2);
         break;
     case SUB:
         cur_inst = new BinaryMInstruction(cur_block,
-                                          floatVersion ? BinaryMInstruction::VSUB : BinaryMInstruction::SUB,
+                                          BinaryMInstruction::SUB,
                                           dst,
                                           src1,
                                           src2);
         break;
     case MUL:
         cur_inst = new BinaryMInstruction(cur_block,
-                                          floatVersion ? BinaryMInstruction::VMUL : BinaryMInstruction::MUL,
+                                          BinaryMInstruction::MUL,
                                           dst,
                                           src1,
                                           src2);
         break;
     case DIV:
         cur_inst = new BinaryMInstruction(cur_block,
-                                          floatVersion ? BinaryMInstruction::VDIV : BinaryMInstruction::DIV,
+                                          BinaryMInstruction::DIV,
                                           dst,
                                           src1,
                                           src2);
@@ -740,6 +752,34 @@ void BinaryInstruction::genMachineCode(AsmBuilder *builder)
             cur_block->InsertInst(new BinaryMInstruction(cur_block, BinaryMInstruction::MUL, new MachineOperand(*dst), new MachineOperand(*dst), new MachineOperand(*src2)));
             cur_inst = new BinaryMInstruction(cur_block, BinaryMInstruction::SUB, new MachineOperand(*dst), new MachineOperand(*src1), new MachineOperand(*dst));
         }
+        break;
+    case FADD:
+        cur_inst = new BinaryMInstruction(cur_block,
+                                          BinaryMInstruction::VADD,
+                                          dst,
+                                          src1,
+                                          src2);
+        break;
+    case FSUB:
+        cur_inst = new BinaryMInstruction(cur_block,
+                                          BinaryMInstruction::VSUB,
+                                          dst,
+                                          src1,
+                                          src2);
+        break;
+    case FMUL:
+        cur_inst = new BinaryMInstruction(cur_block,
+                                          BinaryMInstruction::VMUL ,
+                                          dst,
+                                          src1,
+                                          src2);
+        break;
+    case FDIV:
+        cur_inst = new BinaryMInstruction(cur_block,
+                                         BinaryMInstruction::VDIV ,
+                                          dst,
+                                          src1,
+                                          src2);
         break;
     default:
         break;
