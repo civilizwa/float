@@ -4,6 +4,7 @@
 #include "AsmBuilder.h"
 #include "MachineCode.h"
 #include "LiveVariableAnalysis.h"
+#include <limits.h>
 
 LinearScan::LinearScan(MachineUnit *unit)
 {
@@ -189,39 +190,34 @@ void LinearScan::computeLiveIntervals()
 bool LinearScan::linearScanRegisterAllocation()
 {
     // Todo
+    bool success = true;//用于判断能否分配成功
     //初始化
     active.clear();
     regs.clear();
     fpuRegs.clear();
     //初始放入可用分配寄存器 4-10
     for (int i = 4; i < 11; i++)
-        regs.push_back(i);
+        regs.push_back(std::move(i));
     for (int i = 16; i <= 31; i++)
-        fpuRegs.push_back(i);
-    bool result = true;//用于判断能否分配成功
+        fpuRegs.push_back(std::move(i));
     //遍历每个unhandled interval没有分配寄存器的活跃区间
-    for (auto interval : intervals)
-    {
+    for (auto interval : intervals) {
         //遍历 active 列表，看该列表中是否存在结束时间早于unhandled interval 的 interval
         //主要用于回收可用寄存器
         expireOldIntervals(interval);
         //没有可分配的寄存器 溢出
-        if ((interval->fpu && fpuRegs.empty()) || (!interval->fpu && regs.empty()))
-        {
+        if ((interval->fpu && fpuRegs.empty()) || (!interval->fpu && regs.empty())) {
             spillAtInterval(interval);//溢出操作
-            result = false;
+            success = false;
         }
-        else
-        {
+        else {
             //分配寄存器 同时删去已经分配的
-            if (interval->fpu)
-            {
-                interval->rreg = fpuRegs[0];
+            if (interval->fpu) { //如果是浮点数
+                interval->rreg = fpuRegs.front();
                 fpuRegs.erase(fpuRegs.begin());
             }
-            else
-            {
-                interval->rreg = regs[0];
+            else {
+                interval->rreg = regs.front();
                 regs.erase(regs.begin());
             }
             //放入已经分配的向量中
@@ -230,27 +226,31 @@ bool LinearScan::linearScanRegisterAllocation()
             sort(active.begin(), active.end(), compareEnd);
         }
     }
-    return result;
+    return success;
 }
 
 void LinearScan::expireOldIntervals(Interval *interval)
 {
     // Todo
+    //查看active中是否有结束时间早于interval起始时间
+    //active按照end时间升序排列，所以只用看头部
+    //头部如果大于 那么直接返回
+    //头部小于 那么active的寄存器可以回收
     std::vector<Interval *>::iterator it = active.begin();
-    while (it != active.end())
-    {
-        Interval *actInterval = *it;
-        if (actInterval->end >= interval->start)
-        {
-            break;
-        }
-        if (actInterval->fpu)
-            fpuRegs.push_back(actInterval->rreg);
+    // for(auto it = active.begin(); it != active.end(); )
+    //     if((*it)->end >= interval->start)
+    //         break;
+    if (it != active.end()) {
+        if ((*it)->end >= interval->start) //只用比较第一个
+            return;
+        if ((*it)->fpu)
+            fpuRegs.push_back(std::move((*it)->rreg));
         else
-            regs.push_back(actInterval->rreg);
-        it = active.erase(it);
+            regs.push_back(std::move((*it)->rreg));
+        it = active.erase(find(active.begin(), active.end(), *it));
+        sort(regs.begin(), regs.end());
     }
-    // sort(regs.begin(), regs.end());
+
 }
 
 // 寄存器溢出操作
@@ -264,14 +264,12 @@ void LinearScan::spillAtInterval(Interval *interval)
     // Todo
     //选择active列表末尾与当前unhandled的一个溢出到栈中
     auto it = active.rbegin();
-    for (; it != active.rend(); it++)
-    {
+    for (; it != active.rend(); it++) {
         if ((*it)->fpu == interval->fpu)
             break;
     }
     //将结束时间更晚的溢出
-    if ((*it)->end > interval->end)
-    {
+    if ((*it)->end > interval->end) {
         //选择active列表末尾溢出，并回收其寄存器
         interval->rreg = (*it)->rreg;
         (*it)->spill = true;
@@ -283,8 +281,7 @@ void LinearScan::spillAtInterval(Interval *interval)
         //插入后再次按照结束时间对活跃区间进行排序
         sort(active.begin(), active.end(), compareEnd);
     }
-    else
-    {
+    else {
         //unhandle溢出更晚只需置位spill标志位
         interval->spill = true;
         spillIntervals.push_back(interval);
@@ -305,8 +302,7 @@ void LinearScan::modifyCode()
 
 void LinearScan::genSpillCode()
 {
-    for (auto &interval : spillIntervals)
-    {
+    for (auto &interval : spillIntervals) {
         if (!interval->spill)//只对spill置位的操作 没有溢出
             continue;
         // TODO
@@ -317,27 +313,21 @@ void LinearScan::genSpillCode()
          */
         //获取栈内相对偏移
         //注意要是负的 以FP为基准
-        interval->disp = func->AllocSpace(4) * -1;
+        interval->disp = -func->AllocSpace(4);
         //遍历其 USE 指令的列表，在 USE 指令前插入 LoadMInstruction，将其从栈内加载到目前的虚拟寄存器中
-        for (auto use : interval->uses)
-        {
+        for (auto use : interval->uses) {
+            int op = INT_MIN;
+                if (interval->fpu) // 区分操作码
+                    op = LoadMInstruction::VLDR;
+                else
+                    op = LoadMInstruction::LDR;
             //在use之前插入load指令 将其从栈内加载到目的虚拟寄存器中
             auto cur_bb = use->getParent()->getParent();
-            if (interval->disp > -254)//正常情况，直接从fp-off的地方加载
-            {
+            if (interval->disp > -254) {//正常情况，直接从fp-off的地方加载
                 MachineInstruction *cur_inst = nullptr;
-                if (interval->fpu)
-                    cur_inst = new LoadMInstruction(cur_bb,
-                                                    LoadMInstruction::VLDR,
-                                                    new MachineOperand(*use),
-                                                    new MachineOperand(MachineOperand::REG, 11),
-                                                    new MachineOperand(MachineOperand::IMM, interval->disp));
-                else
-                    cur_inst = new LoadMInstruction(cur_bb,
-                                                    LoadMInstruction::LDR,
-                                                    new MachineOperand(*use),
-                                                    new MachineOperand(MachineOperand::REG, 11),
-                                                    new MachineOperand(MachineOperand::IMM, interval->disp));
+                cur_inst = new LoadMInstruction(cur_bb, op, new MachineOperand(*use),
+                    new MachineOperand(MachineOperand::REG, 11), 
+                    new MachineOperand(MachineOperand::IMM, interval->disp));
                 //USE指令前插入Load指令
                 cur_bb->insertBefore(cur_inst, use->getParent());
             }
@@ -345,85 +335,52 @@ void LinearScan::genSpillCode()
             //超出寻址空间 不能直接加载 要分两步
             //首先加载到虚拟寄存器 ldr v1, off; off是相对偏移
             //范围超过255就load，最后load范围256*4kb
-            else
-            {
+            else {
                 auto internal_reg = new MachineOperand(MachineOperand::VREG, SymbolTable::getLabel());
-                MachineInstruction *cur_inst = new LoadMInstruction(cur_bb,
-                                                                    LoadMInstruction::LDR,
-                                                                    internal_reg,
-                                                                    new MachineOperand(MachineOperand::IMM, interval->disp));
+                MachineInstruction *cur_inst = new LoadMInstruction(cur_bb, LoadMInstruction::LDR,
+                    internal_reg, new MachineOperand(MachineOperand::IMM, interval->disp));
                 cur_bb->insertBefore(cur_inst, use->getParent());
-                cur_inst = new BinaryMInstruction(cur_bb,
-                                                  BinaryMInstruction::ADD,
-                                                  new MachineOperand(*internal_reg),
-                                                  new MachineOperand(*internal_reg),
-                                                  new MachineOperand(MachineOperand::REG, 11));
+                cur_inst = new BinaryMInstruction(cur_bb, BinaryMInstruction::ADD,
+                    new MachineOperand(*internal_reg), new MachineOperand(*internal_reg),
+                    new MachineOperand(MachineOperand::REG, 11));
                 cur_bb->insertBefore(cur_inst, use->getParent());
                 //超出寻址空间的话 第二步ldr r0,[fp,v1]
-                if (interval->fpu)
-                    cur_inst = new LoadMInstruction(cur_bb,
-                                                    LoadMInstruction::VLDR,
-                                                    new MachineOperand(*use),
-                                                    new MachineOperand(*internal_reg));
-                else
-                    cur_inst = new LoadMInstruction(cur_bb,
-                                                    LoadMInstruction::LDR,
-                                                    new MachineOperand(*use),
-                                                    new MachineOperand(*internal_reg));
+                cur_inst = new LoadMInstruction(cur_bb, op,
+                    new MachineOperand(*use), new MachineOperand(*internal_reg));
                 cur_bb->insertBefore(cur_inst, use->getParent());
             }
         }
+
         //遍历其 DEF 指令的列表，在 DEF 指令后插入 StoreMInstruction，将其从目前的虚拟寄存器中存到栈内
-        for (auto def : interval->defs)
-        {
+        for (auto def : interval->defs) {
             //在def之后插入store指令
             auto cur_bb = def->getParent()->getParent();
-            //同样要考虑寻址空间 ldr v1, off
-            if (interval->disp > -254)//正常store
-            {
-                MachineInstruction *cur_inst = nullptr;
-                if (interval->fpu)
-                    cur_inst = new StoreMInstruction(cur_bb,
-                                                     StoreMInstruction::VSTR,
-                                                     new MachineOperand(*def),
-                                                     new MachineOperand(MachineOperand::REG, 11),
-                                                     new MachineOperand(MachineOperand::IMM, interval->disp));
+            int op = INT_MIN;
+                if (interval->fpu) // 区分操作码
+                    op = StoreMInstruction::VSTR;
                 else
-                    cur_inst = new StoreMInstruction(cur_bb,
-                                                     StoreMInstruction::STR,
-                                                     new MachineOperand(*def),
-                                                     new MachineOperand(MachineOperand::REG, 11),
-                                                     new MachineOperand(MachineOperand::IMM, interval->disp));
+                    op = StoreMInstruction::STR;
+            //同样要考虑寻址空间 ldr v1, off
+            if (interval->disp > -254) {//正常store
+                MachineInstruction *cur_inst = nullptr;
+                cur_inst = new StoreMInstruction(cur_bb, op,
+                    new MachineOperand(*def), new MachineOperand(MachineOperand::REG, 11),
+                    new MachineOperand(MachineOperand::IMM, interval->disp));
                 //StoreMInstruction要插入DEF指令之后
                 cur_bb->insertAfter(cur_inst, def->getParent());
             }
-            // 这里负数太小的话就load吧
-            else
-            {
+            else {
                 auto internal_reg = new MachineOperand(MachineOperand::VREG, SymbolTable::getLabel());
-                auto cur_inst = new LoadMInstruction(cur_bb,
-                                                     LoadMInstruction::LDR,
-                                                     internal_reg,
-                                                     new MachineOperand(MachineOperand::IMM, interval->disp));
+                auto cur_inst = new LoadMInstruction(cur_bb, LoadMInstruction::LDR, internal_reg,
+                    new MachineOperand(MachineOperand::IMM, interval->disp));
                 cur_bb->insertAfter(cur_inst, def->getParent());
-                auto cur_inst1 = new BinaryMInstruction(cur_bb,
-                                                        BinaryMInstruction::ADD,
-                                                        new MachineOperand(*internal_reg),
-                                                        new MachineOperand(*internal_reg),
-                                                        new MachineOperand(MachineOperand::REG, 11));
+                auto cur_inst1 = new BinaryMInstruction(cur_bb, BinaryMInstruction::ADD,
+                    new MachineOperand(*internal_reg), new MachineOperand(*internal_reg),
+                    new MachineOperand(MachineOperand::REG, 11));
                 cur_bb->insertAfter(cur_inst1, cur_inst);
-
                 MachineInstruction *cur_inst2 = nullptr;
-                if (interval->fpu)
-                    cur_inst2 = new StoreMInstruction(cur_bb,
-                                                      StoreMInstruction::VSTR,
-                                                      new MachineOperand(*def),
-                                                      new MachineOperand(*internal_reg));
-                else
-                    cur_inst2 = new StoreMInstruction(cur_bb,
-                                                      StoreMInstruction::STR,
-                                                      new MachineOperand(*def),
-                                                      new MachineOperand(*internal_reg));
+                cur_inst2 = new StoreMInstruction(cur_bb, op,
+                    new MachineOperand(*def), new MachineOperand(*internal_reg));
                 cur_bb->insertAfter(cur_inst2, cur_inst1);
             }
         }
