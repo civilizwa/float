@@ -60,7 +60,7 @@ std::string ArrayType::toStr()
     }
     // 结束的时候，tmp应该是基本类型
     buffer << baseType->toStr();
-    for (unsigned long int i = 0; i < indexs.size(); i++)
+    for (int i = 0; i < indexs.size(); i++)
     {
         buffer << "]";
     }

@@ -74,6 +74,7 @@ public:
     bool isExpr() const { return kind == EXPR; };
     bool isImplictCastExpr() const { return kind == IMPLICTCASTEXPR; };
     bool isUnaryExpr() const { return kind == UNARYEXPR; };
+    Type* getOriginType() { return type; };
 };
 
 class BinaryExpr : public ExprNode

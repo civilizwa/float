@@ -8,28 +8,32 @@
 LinearScan::LinearScan(MachineUnit *unit)
 {
     this->unit = unit;
-    for (int i = 4; i < 11; i++)
+    for (int i = 4; i < 11; i++) //可分配寄存器为4-10
         regs.push_back(i);
     for (int i = 16; i <= 31; i++) // s0-s15好像都可以用来传参
         fpuRegs.push_back(i);
 }
 
+//遍历每个函数 获得虚拟寄存器对应的物理寄存器
 void LinearScan::allocateRegisters()
 {
+    //遍历unit下的每个func
     for (auto &f : unit->getFuncs())
     {
         func = f;
-        bool success;
-        success = false;
+        //用success判断何时完成分配
+        bool success = false;
         while (!success) // repeat until all vregs can be mapped
         {
+            //旧区间重构，重分配原来的寄存器
             computeLiveIntervals();
             spillIntervals.clear();
             success = linearScanRegisterAllocation();
+            //有溢出情况 生成溢出代码 否则直接调整寄存器
             if (success) // all vregs can be mapped to real regs
-                modifyCode();
+                modifyCode();//没有溢出 修改寄存器映射即可退出
             else // spill vregs that can't be mapped to real regs
-                genSpillCode();
+                genSpillCode();//生成溢出代码 然后继续循环
         }
     }
 }
@@ -37,25 +41,32 @@ void LinearScan::allocateRegisters()
 void LinearScan::makeDuChains()
 {
     LiveVariableAnalysis lva;
-    lva.pass(func);
+    lva.pass(func);//遍历函数 添加使用和定义变量，分配寄存器
     du_chains.clear();
     int i = 0;
     std::map<MachineOperand, std::set<MachineOperand *>> liveVar;
+    //遍历函数每个MachineBlock
     for (auto &bb : func->getBlocks())
     {
         liveVar.clear();
+        //放入不活跃的变量
         for (auto &t : bb->getLiveOut())
             liveVar[*t].insert(t);
         int no;
         no = i = bb->getInsts().size() + i;
+        //为了对于标号 逆序遍历
         for (auto inst = bb->getInsts().rbegin(); inst != bb->getInsts().rend(); inst++)
         {
             (*inst)->setNo(no--);
+            //遍历指令定义的操作数
+            //将虚拟寄存器的变量
             for (auto &def : (*inst)->getDef())
             {
                 if (def->isVReg())
                 {
-                    auto &uses = liveVar[*def];
+                    //获取定义变量的活跃寄存器
+                    auto &uses = liveVar[*def];//对应变量的集合
+                    //集合插入du_chains
                     du_chains[def].insert(uses.begin(), uses.end());
                     auto &kill = lva.getAllUses()[*def];
                     std::set<MachineOperand *> res;
@@ -174,27 +185,35 @@ void LinearScan::computeLiveIntervals()
     sort(intervals.begin(), intervals.end(), compareStart);
 }
 
+// 【重点函数】扫描 分配寄存器
 bool LinearScan::linearScanRegisterAllocation()
 {
     // Todo
+    //初始化
     active.clear();
     regs.clear();
     fpuRegs.clear();
+    //初始放入可用分配寄存器 4-10
     for (int i = 4; i < 11; i++)
         regs.push_back(i);
     for (int i = 16; i <= 31; i++)
         fpuRegs.push_back(i);
-    bool result = true;
+    bool result = true;//用于判断能否分配成功
+    //遍历每个unhandled interval没有分配寄存器的活跃区间
     for (auto interval : intervals)
     {
+        //遍历 active 列表，看该列表中是否存在结束时间早于unhandled interval 的 interval
+        //主要用于回收可用寄存器
         expireOldIntervals(interval);
+        //没有可分配的寄存器 溢出
         if ((interval->fpu && fpuRegs.empty()) || (!interval->fpu && regs.empty()))
         {
-            spillAtInterval(interval);
+            spillAtInterval(interval);//溢出操作
             result = false;
         }
         else
         {
+            //分配寄存器 同时删去已经分配的
             if (interval->fpu)
             {
                 interval->rreg = fpuRegs[0];
@@ -205,7 +224,9 @@ bool LinearScan::linearScanRegisterAllocation()
                 interval->rreg = regs[0];
                 regs.erase(regs.begin());
             }
-            active.push_back(interval);
+            //放入已经分配的向量中
+            active.push_back(std::move(interval));//右值引用 可以直接用interval
+            //对活跃区间按照结束时间升序排序
             sort(active.begin(), active.end(), compareEnd);
         }
     }
@@ -232,26 +253,39 @@ void LinearScan::expireOldIntervals(Interval *interval)
     // sort(regs.begin(), regs.end());
 }
 
+// 寄存器溢出操作
+// 在 active列表中最后一个 interval 和当前 unhandled interval 中选择一个 interval 将其溢出到栈中，
+// 选择策略就是看谁的活跃区间结束时间更晚，如果是 unhandled interval 的结束时间更晚，
+// 只需要置位其 spill 标志位即可，如果是 active 列表中的 interval 结束时间更晚，需要置位
+// 其 spill 标志位，并将其占用的寄存器分配给 unhandled interval，再按照 unhandled interval
+// 活跃区间结束位置，将其插入到 active 列表中。
 void LinearScan::spillAtInterval(Interval *interval)
 {
     // Todo
+    //选择active列表末尾与当前unhandled的一个溢出到栈中
     auto it = active.rbegin();
     for (; it != active.rend(); it++)
     {
         if ((*it)->fpu == interval->fpu)
             break;
     }
+    //将结束时间更晚的溢出
     if ((*it)->end > interval->end)
     {
+        //选择active列表末尾溢出，并回收其寄存器
         interval->rreg = (*it)->rreg;
         (*it)->spill = true;
+        //额外添加 处理寄存器
         spillIntervals.push_back(*it);
         active.erase((++it).base());
+        //再按照 unhandled interval活跃区间结束位置，将其插入到 active 列表中。
         active.push_back(interval);
+        //插入后再次按照结束时间对活跃区间进行排序
         sort(active.begin(), active.end(), compareEnd);
     }
     else
     {
+        //unhandle溢出更晚只需置位spill标志位
         interval->spill = true;
         spillIntervals.push_back(interval);
     }
@@ -273,7 +307,7 @@ void LinearScan::genSpillCode()
 {
     for (auto &interval : spillIntervals)
     {
-        if (!interval->spill)
+        if (!interval->spill)//只对spill置位的操作 没有溢出
             continue;
         // TODO
         /* HINT:
@@ -281,13 +315,15 @@ void LinearScan::genSpillCode()
          * 1. insert ldr inst before the use of vreg
          * 2. insert str inst after the def of vreg
          */
-        // 在栈中分配内存
+        //获取栈内相对偏移
+        //注意要是负的 以FP为基准
         interval->disp = func->AllocSpace(4) * -1;
-        // 在use前插入ldr
+        //遍历其 USE 指令的列表，在 USE 指令前插入 LoadMInstruction，将其从栈内加载到目前的虚拟寄存器中
         for (auto use : interval->uses)
         {
+            //在use之前插入load指令 将其从栈内加载到目的虚拟寄存器中
             auto cur_bb = use->getParent()->getParent();
-            if (interval->disp > -254)
+            if (interval->disp > -254)//正常情况，直接从fp-off的地方加载
             {
                 MachineInstruction *cur_inst = nullptr;
                 if (interval->fpu)
@@ -302,9 +338,13 @@ void LinearScan::genSpillCode()
                                                     new MachineOperand(*use),
                                                     new MachineOperand(MachineOperand::REG, 11),
                                                     new MachineOperand(MachineOperand::IMM, interval->disp));
+                //USE指令前插入Load指令
                 cur_bb->insertBefore(cur_inst, use->getParent());
             }
-            // 这里负数太小的话就load吧
+            //判断当前数据地址是否超过寻址空间 
+            //超出寻址空间 不能直接加载 要分两步
+            //首先加载到虚拟寄存器 ldr v1, off; off是相对偏移
+            //范围超过255就load，最后load范围256*4kb
             else
             {
                 auto internal_reg = new MachineOperand(MachineOperand::VREG, SymbolTable::getLabel());
@@ -319,6 +359,7 @@ void LinearScan::genSpillCode()
                                                   new MachineOperand(*internal_reg),
                                                   new MachineOperand(MachineOperand::REG, 11));
                 cur_bb->insertBefore(cur_inst, use->getParent());
+                //超出寻址空间的话 第二步ldr r0,[fp,v1]
                 if (interval->fpu)
                     cur_inst = new LoadMInstruction(cur_bb,
                                                     LoadMInstruction::VLDR,
@@ -332,11 +373,13 @@ void LinearScan::genSpillCode()
                 cur_bb->insertBefore(cur_inst, use->getParent());
             }
         }
-        // 在def后插入str
+        //遍历其 DEF 指令的列表，在 DEF 指令后插入 StoreMInstruction，将其从目前的虚拟寄存器中存到栈内
         for (auto def : interval->defs)
         {
+            //在def之后插入store指令
             auto cur_bb = def->getParent()->getParent();
-            if (interval->disp > -254)
+            //同样要考虑寻址空间 ldr v1, off
+            if (interval->disp > -254)//正常store
             {
                 MachineInstruction *cur_inst = nullptr;
                 if (interval->fpu)
@@ -351,6 +394,7 @@ void LinearScan::genSpillCode()
                                                      new MachineOperand(*def),
                                                      new MachineOperand(MachineOperand::REG, 11),
                                                      new MachineOperand(MachineOperand::IMM, interval->disp));
+                //StoreMInstruction要插入DEF指令之后
                 cur_bb->insertAfter(cur_inst, def->getParent());
             }
             // 这里负数太小的话就load吧
