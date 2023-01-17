@@ -228,33 +228,6 @@ LINECOMMENT \/\/[^\n]*
     chars += strlen(",");
     return COMMA;
 }
-"putfarray" {
-    if(dump_tokens)
-        DEBUG_FOR_LAB4(yytext);
-    char *lexeme;
-    lexeme = new char[strlen(yytext) + 1];
-    strcpy(lexeme, yytext);
-    yylval.strtype = lexeme;
-    std::vector<Type*> vec;
-    vec.push_back(TypeSystem::intType);
-    vec.push_back(new PointerType(new ArrayType({}, TypeSystem::floatType)));
-    Type* funcType = new FunctionType(TypeSystem::voidType, vec);
-    SymbolEntry* se = new IdentifierSymbolEntry(funcType, yytext, globals->getLevel(), true);
-    globals->install(yytext, se);
-    return ID;
-}
-"getfarray" {
-    if(dump_tokens)
-        DEBUG_FOR_LAB4(yytext);
-    char *lexeme;
-    lexeme = new char[strlen(yytext) + 1];
-    strcpy(lexeme, yytext);
-    yylval.strtype = lexeme;
-    Type* funcType = new FunctionType(TypeSystem::intType, {new PointerType(new ArrayType({}, TypeSystem::floatType))});
-    SymbolEntry* se = new IdentifierSymbolEntry(funcType, yytext, globals->getLevel(), true);
-    globals->install(yytext, se);
-    return ID;
-}
 {DECIMIAL} {
     if(dump_tokens)
         DEBUG_FOR_LAB4(string("NUMBER\t") + string(yytext));

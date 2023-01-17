@@ -66,9 +66,8 @@ int main(int argc, char *argv[])
     }
     
     //与上次不同 这次要包含函数的类型
-    SymbolEntry *se1,*se2,*se3,*se4,*se5,*se6,*se7,*se8;
-    Type *funcType1,*funcType2,*funcType3,*funcType4,*funcType5,*funcType6,*funcType7,*funcType8;
-
+    SymbolEntry *se1,*se2,*se3,*se4,*se5,*se6,*se7,*se8,*se9,*se10;
+    Type *funcType1,*funcType2,*funcType3,*funcType4,*funcType5,*funcType6,*funcType7,*funcType8,*funcType9,*funcType10;
     //其实PUTF只要用这里的就够了
     //getint没有参数 
     funcType1 = new FunctionType(TypeSystem::intType,{},0);
@@ -99,6 +98,15 @@ int main(int argc, char *argv[])
     //getfloat 0个参数
     funcType8 = new FunctionType(TypeSystem::floatType,{},0);
     se8 = new IdentifierSymbolEntry(funcType8, "getfloat", identifiers->getLevel(), true);
+    //putfarray 2个参数
+    std::vector<Type*> paramType3;
+    paramType3.push_back(TypeSystem::intType);
+    paramType3.push_back(new PointerType(new ArrayType({}, TypeSystem::floatType)));
+    funcType9 = new FunctionType(TypeSystem::voidType, paramType3, 2);
+    se9 = new IdentifierSymbolEntry(funcType9, "putfarray", identifiers->getLevel(), true);
+    //getfarray 1个参数
+    funcType10 = new FunctionType(TypeSystem::intType, {new PointerType(new ArrayType({}, TypeSystem::floatType))}, 1);
+    se10 = new IdentifierSymbolEntry(funcType10, "getfarray", identifiers->getLevel(), true);
     //将sysy运行时库函数加入符号表中
     identifiers->install("getint",se1);
     identifiers->install("getch",se2);
@@ -108,6 +116,18 @@ int main(int argc, char *argv[])
     identifiers->install("putarray",se6);
     identifiers->install("putfloat",se7);
     identifiers->install("getfloat",se8);
+    identifiers->install("putfarray",se9);
+    identifiers->install("getfarray",se10);
+    unit.insertDeclare(se1);
+    unit.insertDeclare(se2);
+    unit.insertDeclare(se3);
+    unit.insertDeclare(se4);
+    unit.insertDeclare(se5);
+    unit.insertDeclare(se6);
+    unit.insertDeclare(se7);
+    unit.insertDeclare(se8);
+    unit.insertDeclare(se9);
+    unit.insertDeclare(se10);
 
     yyparse();
     if (dump_ast)

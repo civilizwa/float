@@ -70,8 +70,8 @@ protected:
     MachineBlock *parent;
     int no;
     int type;                            // Instruction type
-    int cond = MachineInstruction::NONE; // Instruction execution condition, optional !!
-    int op;                              // Instruction opcode
+    int cond = MachineInstruction::NONE; // 条件码Instruction execution condition, optional !!
+    int op;                              // 操作码Instruction opcode
     // Instruction operand list, sorted by appearance order in assembly instruction
     std::vector<MachineOperand *> def_list;
     std::vector<MachineOperand *> use_list;
@@ -138,8 +138,7 @@ public:
     BinaryMInstruction(MachineBlock *p, int op,
                        MachineOperand *dst, MachineOperand *src1, MachineOperand *src2,
                        int cond = MachineInstruction::NONE);
-    void setStackSize(int stack_size)
-    {
+    void setStackSize(int stack_size) {
         use_list[1] = new MachineOperand(MachineOperand::IMM, stack_size);
     }
     void output();
@@ -148,16 +147,11 @@ public:
 class LoadMInstruction : public MachineInstruction
 {
 public:
-    enum opType
-    {
-        LDR,
-        VLDR
-    };
+    enum opType { LDR, VLDR };
     LoadMInstruction(MachineBlock *p, int op,
                      MachineOperand *dst, MachineOperand *src1, MachineOperand *src2 = nullptr,
                      int cond = MachineInstruction::NONE);
-    void setOff(int offset)
-    {
+    void setOff(int offset) {
         use_list[1] = new MachineOperand(MachineOperand::IMM, use_list[1]->getVal() + offset);
     }
     void output();
@@ -166,11 +160,7 @@ public:
 class StoreMInstruction : public MachineInstruction
 {
 public:
-    enum opType
-    {
-        STR,
-        VSTR
-    };
+    enum opType { STR, VSTR };
     StoreMInstruction(MachineBlock *p, int op,
                       MachineOperand *src1, MachineOperand *src2, MachineOperand *src3 = nullptr,
                       int cond = MachineInstruction::NONE);
@@ -196,12 +186,7 @@ public:
 class BranchMInstruction : public MachineInstruction
 {
 public:
-    enum opType
-    {
-        B = 0,
-        BL,
-        BX
-    };
+    enum opType { B, BL, BX, BEQ, BNE, BGE, BLE, BGT, BLT };
     BranchMInstruction(MachineBlock *p, int op,
                        MachineOperand *dst,
                        int cond = MachineInstruction::NONE);
@@ -211,11 +196,7 @@ public:
 class CmpMInstruction : public MachineInstruction
 {
 public:
-    enum opType
-    {
-        CMP,
-        VCMP
-    };
+    enum opType { CMP, VCMP };
     CmpMInstruction(MachineBlock *p, int op,
                     MachineOperand *src1, MachineOperand *src2,
                     int cond = MachineInstruction::NONE);
@@ -225,18 +206,11 @@ public:
 class StackMInstrcuton : public MachineInstruction
 {
 public:
-    enum opType
-    {
-        PUSH = 0,
-        POP,
-        VPUSH,
-        VPOP
-    };
+    enum opType { PUSH, POP, VPUSH, VPOP };
     StackMInstrcuton(MachineBlock *p, int op,
                      std::vector<MachineOperand *> srcs,
                      int cond = MachineInstruction::NONE);
-    void setRegs(std::vector<MachineOperand *> regs)
-    {
+    void setRegs(std::vector<MachineOperand *> regs) {
         use_list.assign(regs.begin(), regs.end());
     }
     void output();
@@ -245,11 +219,7 @@ public:
 class VcvtMInstruction : public MachineInstruction
 {
 public:
-    enum opType
-    {
-        FTS,
-        STF
-    };
+    enum opType { FTS, STF };
     VcvtMInstruction(MachineBlock *p, int op,
                      MachineOperand *dst, MachineOperand *src,
                      int cond = MachineInstruction::NONE);
@@ -262,6 +232,14 @@ public:
     VmrsMInstruction(MachineBlock *p,
                      int cond = MachineInstruction::NONE);
     void output();
+};
+
+class UxtbMInstruction : public MachineInstruction
+{
+public:
+    UxtbMInstruction(MachineBlock* p, MachineOperand* src);
+    void output();
+
 };
 
 class MachineBlock

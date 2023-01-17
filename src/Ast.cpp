@@ -270,12 +270,12 @@ CallExpr::CallExpr(SymbolEntry *se, ExprNode *param) : ExprNode(se), param(param
             SymbolEntry *se = new TemporarySymbolEntry(this->type, SymbolTable::getLabel());
             dst = new Operand(se);
         }
-        ExprNode *temp = param;
-        // 逐个比较形参列表和实参列表中每个参数的类型是否相同
-        if (params.size() < FParams.size())
-            fprintf(stderr, "too few arguments to function %s %s\n", symbolEntry->toStr().c_str(), type->toStr().c_str());
-        else if (params.size() > FParams.size())
-            fprintf(stderr, "too many arguments to function %s %s\n", symbolEntry->toStr().c_str(), type->toStr().c_str());
+        // ExprNode *temp = param;
+        // // 逐个比较形参列表和实参列表中每个参数的类型是否相同
+        // if (params.size() < FParams.size())
+        //     fprintf(stderr, "too few arguments to function %s %s\n", symbolEntry->toStr().c_str(), type->toStr().c_str());
+        // else if (params.size() > FParams.size())
+        //     fprintf(stderr, "too many arguments to function %s %s\n", symbolEntry->toStr().c_str(), type->toStr().c_str());
         auto it = FParams.begin();
         auto it2 = params.begin();
         for (; it != FParams.end(); it++, it2++)
@@ -300,10 +300,6 @@ CallExpr::CallExpr(SymbolEntry *se, ExprNode *param) : ExprNode(se), param(param
     }
     else{
         fprintf(stderr, "function is undefined\n");
-    }
-    if (((IdentifierSymbolEntry *)se)->isSysy())
-    {
-        unit.insertDeclare(se);
     }
 }
 

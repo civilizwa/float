@@ -13,7 +13,7 @@ class SymbolEntry
 private:
     int kind;
     SymbolEntry *next;
-
+    //为数组和函数参数、连续定义做准备，链表的方式存储数组的那些维度值以及函数的参数的SymboEntry
 protected:
     enum
     {
@@ -67,7 +67,7 @@ class ConstantSymbolEntry : public SymbolEntry
 {
 private:
     double value;
-
+                //本来想写个string，发现测试样例根本没有string，摆了
 public:
     ConstantSymbolEntry(Type *type, double value);
     ConstantSymbolEntry(Type *type);

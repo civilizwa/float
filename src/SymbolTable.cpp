@@ -13,27 +13,31 @@ SymbolEntry::SymbolEntry(Type *type, int kind)
 
 bool SymbolEntry::setNext(SymbolEntry *se)
 {
+    FunctionType* ft = dynamic_cast<FunctionType*>(se->getType());
     SymbolEntry *s = this;
-    long unsigned int cnt = ((FunctionType *)(se->getType()))->getParamsType().size();
-    if (cnt == ((FunctionType *)(s->getType()))->getParamsType().size())
+    int cnt = ft->getParamsType().size();
+    FunctionType* st = dynamic_cast<FunctionType*>(s->getType());
+    if (cnt == st->getParamsType().size())
         return false;
-    while (s->getNext())
+    for( ; s->getNext(); s = s->getNext())
     {
-        if (cnt == ((FunctionType *)(s->getType()))->getParamsType().size())
+        if (cnt == st->getParamsType().size())
             return false;
-        s = s->getNext();
     }
     s->next = se;
     return true;
 }
 
-ConstantSymbolEntry::ConstantSymbolEntry(Type *type, double value) : SymbolEntry(type, SymbolEntry::CONSTANT)
+ConstantSymbolEntry::ConstantSymbolEntry(Type *type, double value)
+     : SymbolEntry(type, SymbolEntry::CONSTANT)
 {
     this->value = value;
 }
 
-ConstantSymbolEntry::ConstantSymbolEntry(Type *type) : SymbolEntry(type, SymbolEntry::CONSTANT)
+ConstantSymbolEntry::ConstantSymbolEntry(Type *type)
+     : SymbolEntry(type, SymbolEntry::CONSTANT)
 {
+    // do nothing
 }
 
 std::string ConstantSymbolEntry::toStr()
@@ -44,11 +48,11 @@ std::string ConstantSymbolEntry::toStr()
     else if (type->isFloat())
     {
         // 浮点数麻烦，直接打印16进制得了
-        /* 终于找到了
+        /* 
         AFAIK just printing a decimal float works. If you
-really want a hexadecimal encoding, just reinterpret the
-floating-point number as an integer and print in hexadecimal; an "LLVM
-float" is just an IEEE float printed in hexadecimal.
+        really want a hexadecimal encoding, just reinterpret the
+        floating-point number as an integer and print in hexadecimal; an "LLVM
+        float" is just an IEEE float printed in hexadecimal.
         */
         double fv = (float)value;
         uint64_t v = reinterpret_cast<uint64_t &>(fv);
@@ -57,10 +61,12 @@ float" is just an IEEE float printed in hexadecimal.
     return buffer.str();
 }
 
-IdentifierSymbolEntry::IdentifierSymbolEntry(Type *type, std::string name, int scope, bool sysy, int argNum) : SymbolEntry(type, SymbolEntry::VARIABLE), name(name), sysy(sysy)
+IdentifierSymbolEntry::IdentifierSymbolEntry(Type *type, std::string name, int scope, bool sysy, int argNum)
+     : SymbolEntry(type, SymbolEntry::VARIABLE), name(name), sysy(sysy)
 {
     this->scope = scope;
     this->arrayValue = nullptr;
+    addr = nullptr;
     // 如果是param，留一个Operand作为参数
     if (scope == PARAM)
     {
@@ -69,29 +75,22 @@ IdentifierSymbolEntry::IdentifierSymbolEntry(Type *type, std::string name, int s
         se->setSelfArgNum(argNum);
         argAddr = new Operand(se);
     }
-    addr = nullptr;
 }
 
 void IdentifierSymbolEntry::setValue(double value)
 {
-    if (this->getType()->isInt() && ((IntType *)this->getType())->isConst() ||
-        this->getType()->isFloat() && ((FloatType *)this->getType())->isConst())
-    {
-        if (!initial)
-        {
-            if (this->getType()->isInt())
-                this->value = (int)value;
-            else
-                this->value = value;
+    // 如果是常量
+    if (this->getType()->isInt() && dynamic_cast<IntType* >(this->getType())->isConst() ||
+        this->getType()->isFloat() && dynamic_cast<FloatType* >(this->getType())->isConst()) {
+        if (!initial) {
             initial = true;
+            goto IBjudge;
         }
         else
-        {
-            exit(-1);
-        }
+            std::cerr << "Error: reassign constant value" << std::endl;
     }
-    else
-    {
+    else {
+        IBjudge: 
         if (this->getType()->isInt())
             this->value = (int)value;
         else
@@ -104,7 +103,8 @@ std::string IdentifierSymbolEntry::toStr()
     return "@" + name;
 }
 
-TemporarySymbolEntry::TemporarySymbolEntry(Type *type, int label) : SymbolEntry(type, SymbolEntry::TEMPORARY)
+TemporarySymbolEntry::TemporarySymbolEntry(Type *type, int label)
+     : SymbolEntry(type, SymbolEntry::TEMPORARY)
 {
     this->label = label;
 }
@@ -144,40 +144,38 @@ SymbolTable::SymbolTable(SymbolTable *prev)
 // local变量表示是否只在当前作用域找
 SymbolEntry *SymbolTable::lookup(std::string name, bool local)
 {
-    SymbolTable *table = this;
-    while (table != nullptr)
+    std::map<std::string, SymbolEntry*>::iterator it;
+    SymbolTable* p = this;
+    it = p->symbolTable.find(name);
+    while(it == p->symbolTable.end() && p->level != 0)
     {
-        if (table->symbolTable.find(name) != table->symbolTable.end())
-        {
-            return table->symbolTable[name];
-        }
-        table = table->prev;
         if (local)
-        {
-            if (table == nullptr || table->getLevel() != 1)
+            if (p == nullptr || p->getLevel() != 1)
                 break;
-        }
+        p = p->prev;
+        it = p->symbolTable.find(name);
     }
-    return nullptr;
+    if(it != p->symbolTable.end())
+    {
+        return it->second;
+    }
+    else
+        return nullptr;
 }
 
 // install the entry into current symbol table.
+bool check;
 void SymbolTable::install(std::string name, SymbolEntry *entry)
 {
     // 如果是函数，要检查重定义
-    if (entry->getType()->isFunc())
-    {
-        if (this->symbolTable.find(name) != this->symbolTable.end())
-        {
-            SymbolEntry *se = this->symbolTable[name];
-            if (se->getType()->isFunc())
-            {
-                se->setNext(entry);
-                return;
-            }
-        }
+    std::map<std::string, SymbolEntry*>::iterator it;
+    it = symbolTable.find(name);
+    if(it==symbolTable.end())
+        symbolTable[name] = entry;
+    else {
+        // cout<< name << " has been defined, please not define twice.\n";
+        check = false;
     }
-    symbolTable[name] = entry;
 }
 
 int SymbolTable::counter = 0;
