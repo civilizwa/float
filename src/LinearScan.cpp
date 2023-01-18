@@ -11,7 +11,7 @@ LinearScan::LinearScan(MachineUnit *unit)
     this->unit = unit;
     for (int i = 4; i < 11; i++) //可分配寄存器为4-10
         regs.push_back(i);
-    for (int i = 16; i <= 31; i++) // s0-s15好像都可以用来传参
+    for (int i = 16; i <= 31; i++) // s0-s15都可以用来传参
         fpuRegs.push_back(i);
 }
 

@@ -47,7 +47,6 @@ std::string ConstantSymbolEntry::toStr()
         buffer << (int)value;
     else if (type->isFloat())
     {
-        // 浮点数麻烦，直接打印16进制得了
         /* 
         AFAIK just printing a decimal float works. If you
         really want a hexadecimal encoding, just reinterpret the
@@ -61,8 +60,8 @@ std::string ConstantSymbolEntry::toStr()
     return buffer.str();
 }
 
-IdentifierSymbolEntry::IdentifierSymbolEntry(Type *type, std::string name, int scope, bool sysy, int argNum)
-     : SymbolEntry(type, SymbolEntry::VARIABLE), name(name), sysy(sysy)
+IdentifierSymbolEntry::IdentifierSymbolEntry(Type *type, std::string name, int scope,  int argNum)
+     : SymbolEntry(type, SymbolEntry::VARIABLE), name(name)
 {
     this->scope = scope;
     this->arrayValue = nullptr;

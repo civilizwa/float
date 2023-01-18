@@ -113,7 +113,6 @@ private:
     double value;
     int label;
     bool initial;
-    bool sysy;
     double *arrayValue;
 
     Operand *addr; // The address of the identifier.
@@ -121,13 +120,13 @@ private:
     // You can add any field you need here.
 
 public:
-    IdentifierSymbolEntry(Type *type, std::string name, int scope, bool sysy = false, int argNum = 0);
+    IdentifierSymbolEntry(Type *type, std::string name, int scope, int argNum = 0);
     virtual ~IdentifierSymbolEntry(){};
     std::string toStr();
     bool isGlobal() const { return scope == GLOBAL; };
     bool isParam() const { return scope == PARAM; };
     bool isLocal() const { return scope >= LOCAL; };
-    bool isSysy() const { return sysy; }
+    //bool isSysy() const { return sysy; }
     int getScope() const { return scope; };
     void setAddr(Operand *addr) { this->addr = addr; };
     Operand *getAddr() { return addr; };

@@ -46,7 +46,7 @@
 %token LPAREN RPAREN LBRACE RBRACE LBRACKET RBRACKET COMMA SEMICOLON
 %token RETURN CONTINUE BREAK
 
-%type<stmttype> Stmts Stmt AssignStmt ExprStmt BlockStmt IfStmt WhileStmt BreakStmt ContinueStmt ReturnStmt DeclStmt FuncDef ConstDeclStmt VarDeclStmt ConstDefList VarDef ConstDef VarDefList FuncFParam FuncFParams FuncFParamsList BlankStmt
+%type<stmttype> Stmts Stmt AssignStmt ExprStmt BlockStmt IfStmt WhileStmt BreakStmt ContinueStmt ReturnStmt DeclStmt FuncDef ConstDeclStmt VarDeclStmt ConstDefList VarDef ConstDef VarDefList FuncFParam FuncFParams FuncFParamsList BlankStmt VarDefSingle VarDefAssign
 %type<exprtype> Exp AddExp Cond LOrExp PrimaryExp LVal RelExp LAndExp MulExp ConstExp EqExp UnaryExp InitVal ConstInitVal FuncRParams FuncRParamsList ArrayIndices
 %type<type> Type
 
@@ -360,6 +360,12 @@ VarDefList
     | VarDef { $$ = $1; }
     ;
 VarDef
+    : VarDefSingle {
+        $$=$1;
+    }
+    | VarDefAssign{$$=$1;}
+    ;
+VarDefSingle
     : ID {
         SymbolEntry* se;
         se = identifiers->lookup($1, true);
@@ -371,20 +377,6 @@ VarDef
         se = new IdentifierSymbolEntry(recentVarType, $1, identifiers->getLevel());
         identifiers->install($1, se);
         $$ = new DeclStmt(new Id(se));
-        delete []$1;
-    }
-    | ID ASSIGN InitVal {
-        SymbolEntry* se;
-        se = identifiers->lookup($1, true);
-        if (se != nullptr) { //重复定义了
-            fprintf(stderr, "variable \"%s\" is repeated declared\n", (char*)$1);
-            delete []$1;
-            assert(se == nullptr);
-        }
-        se = new IdentifierSymbolEntry(recentVarType, $1, identifiers->getLevel());
-        identifiers->install($1, se);
-        ((IdentifierSymbolEntry*)se)->setValue($3->getValue());
-        $$ = new DeclStmt(new Id(se), $3);
         delete []$1;
     }
     | ID ArrayIndices {
@@ -405,6 +397,22 @@ VarDef
         se = new IdentifierSymbolEntry(arrType, $1, identifiers->getLevel());
         identifiers->install($1, se);
         $$ = new DeclStmt(new Id(se));
+        delete []$1;
+    }
+    ;
+VarDefAssign
+    :ID ASSIGN InitVal {
+        SymbolEntry* se;
+        se = identifiers->lookup($1, true);
+        if (se != nullptr) { //重复定义了
+            fprintf(stderr, "variable \"%s\" is repeated declared\n", (char*)$1);
+            delete []$1;
+            assert(se == nullptr);
+        }
+        se = new IdentifierSymbolEntry(recentVarType, $1, identifiers->getLevel());
+        identifiers->install($1, se);
+        ((IdentifierSymbolEntry*)se)->setValue($3->getValue());
+        $$ = new DeclStmt(new Id(se), $3);
         delete []$1;
     }
     | ID ArrayIndices ASSIGN {
@@ -438,6 +446,8 @@ VarDef
         idx = 0;
     }
     ;
+
+
 ArrayIndices
     : LBRACKET ConstExp RBRACKET {
         $$ = $2; 
@@ -605,15 +615,14 @@ FuncDef
         floatArgNum = 0;
     }
     LPAREN FuncFParamsList RPAREN {
-        Type* funcType;
-        std::vector<Type*> vec;
+        std::vector<Type*> vec;//存储参数类型
         DeclStmt* temp = (DeclStmt*)$5;//获取参数列表，将其压入vec中
         while(temp){
             vec.push_back(temp->getId()->getSymPtr()->getType());
             temp = (DeclStmt*)(temp->getNext());
         }
         //生成函数类型，其中包括返回值类型以及参数类型
-        funcType = new FunctionType($1, vec);
+        Type* funcType = new FunctionType($1, vec);
         SymbolEntry* se = new IdentifierSymbolEntry(funcType, $2, identifiers->getPrev()->getLevel());
         identifiers->getPrev()->install($2, se);
     } 
@@ -660,7 +669,7 @@ FuncFParam
             }
             intArgNum++;
         }
-        se = new IdentifierSymbolEntry($1, $2, identifiers->getLevel(), false, argNum);
+        se = new IdentifierSymbolEntry($1, $2, identifiers->getLevel(), argNum);
         identifiers->install($2, se);
         $$ = new DeclStmt(new Id(se));
         delete []$2;
@@ -674,7 +683,7 @@ FuncFParam
             spillPos--;
         }
         intArgNum++;
-        se = new IdentifierSymbolEntry(new PointerType(new ArrayType({}, $1)), $2, identifiers->getLevel(), false, argNum);
+        se = new IdentifierSymbolEntry(new PointerType(new ArrayType({}, $1)), $2, identifiers->getLevel(), argNum);
         identifiers->install($2, se);
         $$ = new DeclStmt(new Id(se));
         delete []$2;
@@ -693,7 +702,7 @@ FuncFParam
         }
         intArgNum++;
         SymbolEntry* se;
-        se = new IdentifierSymbolEntry(new PointerType(new ArrayType(indexs, $1)), $2, identifiers->getLevel(), false, argNum);
+        se = new IdentifierSymbolEntry(new PointerType(new ArrayType(indexs, $1)), $2, identifiers->getLevel(), argNum);
         identifiers->install($2, se);
         $$ = new DeclStmt(new Id(se));
         delete []$2;

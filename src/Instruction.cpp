@@ -942,7 +942,6 @@ void BinaryInstruction::genMachineCode(AsmBuilder *builder)
     cur_block->InsertInst(cur_inst);
 }
 
-// 会调用Unary只有ADD和SUB的情况，NOT是用cmp和xor来处理的
 void UnaryInstruction::genMachineCode(AsmBuilder *builder)
 {
     // TODO
