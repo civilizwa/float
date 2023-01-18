@@ -718,7 +718,7 @@ void DeclStmt::genCode()
         addr_se->setType(new PointerType(se->getType()));
         Operand* addr = new Operand(addr_se);
         se->setAddr(addr);
-        unit.addGlobalVar(se);
+        unit.insertGlobal(se);
         if (se->getType()->isArray() && exprArray) {
             int size = se->getType()->getSize() / 32;
             double *arrayValue = new double[size];

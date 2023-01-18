@@ -80,6 +80,7 @@ void MachineOperand::output()
      * immediate num 1 -> print #1;
      * register 1 -> print r1;
      * lable addr_a -> print addr_a; */
+    auto parent = this->getParent();
     switch (this->type)
     {
     case IMM:
@@ -102,7 +103,8 @@ void MachineOperand::output()
         else if (this->label.substr(0, 1) == "@") // 函数
             fprintf(yyout, "%s", this->label.c_str() + 1);
         else // 变量
-            fprintf(yyout, "addr_%s_%d", this->label.c_str(), this->getParent()->getParent()->getParent()->getParent()->getLtorgNum());
+            fprintf(yyout, "addr_%s_%d", this->label.c_str(),
+                 parent->getParent()->getParent()->getParent()->getLtorgNum());
     default:
         break;
     }
@@ -395,6 +397,7 @@ CmpMInstruction::CmpMInstruction(MachineBlock *p, int op,
     this->type = MachineInstruction::CMP;
     this->op = op;
     this->cond = cond;
+    p->setCmpCond(cond);
     use_list.push_back(src1);
     use_list.push_back(src2);
     src1->setParent(this);
@@ -564,47 +567,42 @@ void MachineBlock::backPatch(std::vector<MachineOperand *> saved_regs)
         else
             rregs.push_back(reg);
     }
-    for (auto inst : unsure_insts)
-    {
-        if (inst->isStack())
-        {
-            if (inst->isVPOP())
-            {
+    for (auto inst : unsure_insts) {
+        if (inst->isStack()) {
+            if (inst->isVPOP()) {
                 if (fregs.empty()) // 如果是空的，把这条指令删掉
-                {
                     eraseInst(inst);
-                }
                 else
-                {
-                    ((StackMInstrcuton *)inst)->setRegs(fregs);
-                }
+                    dynamic_cast<StackMInstrcuton* >(inst)->setRegs(fregs);
             }
             else if (inst->isPOP())
-                ((StackMInstrcuton *)inst)->setRegs(rregs);
+                dynamic_cast<StackMInstrcuton* >(inst)->setRegs(rregs);
         }
         else if (inst->isLoad())
-            ((LoadMInstruction *)inst)->setOff(saved_regs.size() * 4);
+            dynamic_cast<LoadMInstruction* >(inst)->setOff(saved_regs.size() * 4);
     }
 }
 
 void MachineBlock::output()
-{
+{   
+    auto parent = this->getParent();
     fprintf(yyout, ".L%d:\n", this->no);
     unsigned long long int inst_num = 0;
-    for (auto iter : inst_list)
-    {
+    for (auto iter : inst_list) {
         iter->output();
         inst_num++;
         if (iter->isRet()) // 这里在每个函数返回语句处打印一个文字池
         {
-            this->getParent()->getParent()->printLTORG();
+            fprintf(yyout, "\n.LTORG\n");//.LTORG: 用于标记文字池的开始
+            parent->getParent()->printGlobal();
         }
         else if (inst_num >= 256)
         { // 这里，每隔256条指令，打一个文字池
             inst_num = 0;
-            int ltorg_num = this->getParent()->getParent()->getLtorgNum();
+            int ltorg_num = parent->getParent()->getLtorgNum();
             fprintf(yyout, "\tb .LT%d\n", ltorg_num);
-            this->getParent()->getParent()->printLTORG();
+            fprintf(yyout, "\n.LTORG\n");//.LTORG: 用于标记文字池的开始
+            parent->getParent()->printGlobal();
             fprintf(yyout, ".LT%d:\n", ltorg_num);
         }
     }
@@ -613,8 +611,7 @@ void MachineBlock::output()
 std::vector<MachineOperand *> MachineFunction::getAllSavedRegs()
 {
     std::vector<MachineOperand *> saved_regs;
-    for (auto reg_no : this->saved_regs)
-    {
+    for (auto reg_no : this->saved_regs) {
         if (reg_no < 15) // 通用寄存器
             saved_regs.push_back(new MachineOperand(MachineOperand::REG, reg_no));
         else if (reg_no > 15) // 专用寄存器
@@ -626,8 +623,7 @@ std::vector<MachineOperand *> MachineFunction::getAllSavedRegs()
 std::vector<MachineOperand *> MachineFunction::getSavedRegs()
 {
     std::vector<MachineOperand *> saved_regs;
-    for (auto reg_no : this->saved_regs)
-    {
+    for (auto reg_no : this->saved_regs) {
         if (reg_no < 15)
             saved_regs.push_back(new MachineOperand(MachineOperand::REG, reg_no));
     }
@@ -638,10 +634,9 @@ std::vector<MachineOperand *> MachineFunction::getSavedFRegs()
 {
     std::vector<MachineOperand *> saved_regs;
     for (auto reg_no : this->saved_regs)
-    {
         if (reg_no > 15)
             saved_regs.push_back(new MachineOperand(MachineOperand::REG, reg_no, true));
-    }
+
     return saved_regs;
 }
 
@@ -675,11 +670,11 @@ void MachineFunction::output()
     int stackSize = stack_size;
     auto stSize = new MachineOperand(MachineOperand::IMM, stackSize);
     if (AsmBuilder::judge(stackSize))
-    {
         (new BinaryMInstruction(entry, BinaryMInstruction::SUB, sp, sp, stSize))->output();
-    }
     else
     {
+        // 如果直接用SUB，会出现错误，因为SUB只能操作8位的立即数，所以要分段。
+        // 分成4个字节，每次减去一个字节
         if (stackSize & 0xff)
             (new BinaryMInstruction(entry, BinaryMInstruction::SUB, sp, sp, new MachineOperand(MachineOperand::IMM, stackSize & 0xff)))->output();
         if (stackSize & 0xff00)
@@ -693,8 +688,7 @@ void MachineFunction::output()
     // 然后这里就先算数右移三位再算数左移三位，8字节对齐一下，要不会发现浮点数有时候很奇怪
     fprintf(yyout, "\tlsr sp, sp, #3\n");
     fprintf(yyout, "\tlsl sp, sp, #3\n");
-    for (auto iter : block_list)
-    {
+    for (auto iter : block_list) {
         iter->backPatch(getAllSavedRegs());
         iter->output();
     }
@@ -709,63 +703,49 @@ void MachineUnit::PrintGlobalDecl()
     std::vector<SymbolEntry *> constVar;
     for (auto se : global_vars)
     {
-        if (se->getType()->isInt() && ((IntType *)se->getType())->isConst() || se->getType()->isFloat() && ((FloatType *)se->getType())->isConst() || se->getType()->isArray() && ((ArrayType *)se->getType())->isConst())
-        {
+        if (se->getType()->isInt() && dynamic_cast<IntType* >(se->getType())->isConst() 
+            || se->getType()->isFloat() && dynamic_cast<FloatType* >(se->getType())->isConst() 
+            || se->getType()->isArray() && dynamic_cast<ArrayType* >(se->getType())->isConst())
             constVar.push_back(se);
-        }
         else
-        {
             commonVar.push_back(se);
-        }
     }
     // 不是const的放data区
-    if (commonVar.size() > 0)
-    {
+    if (commonVar.size() > 0) {
         fprintf(yyout, ".data\n");
-        for (auto se : commonVar)
-        {
-            if (se->getType()->isArray())
-            {
-                if (((IdentifierSymbolEntry *)se)->isInitial()) // 数组有初始化
+        for (auto se : commonVar) {
+            if (se->getType()->isArray()) {
+                if (dynamic_cast<IdentifierSymbolEntry* >(se)->isInitial()) // 数组有初始化
                 {
                     fprintf(yyout, ".global %s\n", se->toStr().c_str() + 1);
                     fprintf(yyout, ".size %s, %d\n", se->toStr().c_str() + 1, se->getType()->getSize() / 8);
                     fprintf(yyout, "%s:\n", se->toStr().c_str() + 1);
                     double *arrayValue = ((IdentifierSymbolEntry *)se)->getArrayValue();
                     int length = se->getType()->getSize() / 32;
-                    if (((ArrayType *)se->getType())->getBaseType()->isFloat())
-                    {
-                        for (int i = 0; i < length; i++)
-                        {
+                    if (dynamic_cast<ArrayType* >(se->getType())->getBaseType()->isFloat()) {
+                        for (int i = 0; i < length; i++) {
                             float value = (float)arrayValue[i];
                             uint32_t num = *((uint32_t *)&value);
                             fprintf(yyout, "\t.word %u\n", num);
                         }
                     }
-                    else
-                    {
+                    else {
                         for (int i = 0; i < length; i++)
-                        {
                             fprintf(yyout, "\t.word %d\n", (int)arrayValue[i]);
-                        }
                     }
                 }
                 else
-                {
                     //.comm symbol, length:在bss段申请一段命名空间,该段空间的名称叫symbol, 长度为length.
                     // Ld 连接器在连接会为它留出空间.
                     fprintf(yyout, ".comm %s, %d\n", se->toStr().c_str() + 1, se->getType()->getSize() / 8);
-                }
             }
-            else
-            {
+            else {
                 fprintf(yyout, ".global %s\n", se->toStr().c_str() + 1);
                 fprintf(yyout, ".size %s, %d\n", se->toStr().c_str() + 1, se->getType()->getSize() / 8);
                 fprintf(yyout, "%s:\n", se->toStr().c_str() + 1);
                 if (se->getType()->isInt())
                     fprintf(yyout, "\t.word %d\n", (int)((IdentifierSymbolEntry *)se)->getValue());
-                if (se->getType()->isFloat())
-                {
+                if (se->getType()->isFloat()) {
                     float value = (float)((IdentifierSymbolEntry *)se)->getValue();
                     uint32_t num = *((uint32_t *)&value);
                     fprintf(yyout, "\t.word %u\n", num);
@@ -777,50 +757,38 @@ void MachineUnit::PrintGlobalDecl()
     if (constVar.size() > 0)
     {
         fprintf(yyout, ".section .rodata\n");
-        for (auto se : constVar)
-        {
-            if (se->getType()->isArray())
-            {
-                if (((IdentifierSymbolEntry *)se)->isInitial())
-                {
+        for (auto se : constVar) {
+            if (se->getType()->isArray()) {
+                if (dynamic_cast<IdentifierSymbolEntry* >(se)->isInitial()) {
                     fprintf(yyout, ".global %s\n", se->toStr().c_str() + 1);
                     fprintf(yyout, ".size %s, %d\n", se->toStr().c_str() + 1, se->getType()->getSize() / 8);
                     fprintf(yyout, "%s:\n", se->toStr().c_str() + 1);
-                    double *arrayValue = ((IdentifierSymbolEntry *)se)->getArrayValue();
+                    double *arrayValue = dynamic_cast<IdentifierSymbolEntry* >(se)->getArrayValue();
                     int length = se->getType()->getSize() / 32;
-                    if (((ArrayType *)se->getType())->getBaseType()->isFloat())
+                    if (dynamic_cast<ArrayType* >(se->getType())->getBaseType()->isFloat())
                     {
-                        for (int i = 0; i < length; i++)
-                        {
+                        for (int i = 0; i < length; i++) {
                             float value = (float)arrayValue[i];
                             uint32_t num = *((uint32_t *)&value);
                             fprintf(yyout, "\t.word %u\n", num);
                         }
                     }
                     else
-                    {
                         for (int i = 0; i < length; i++)
-                        {
                             fprintf(yyout, "\t.word %d\n", (int)arrayValue[i]);
-                        }
-                    }
                 }
                 else
-                {
                     //.comm symbol, length:在bss段申请一段命名空间,该段空间的名称叫symbol, 长度为length.
                     // Ld 连接器在连接会为它留出空间.
                     fprintf(yyout, ".comm %s, %d\n", se->toStr().c_str() + 1, se->getType()->getSize() / 8);
-                }
             }
-            else
-            {
+            else {
                 fprintf(yyout, ".global %s\n", se->toStr().c_str() + 1);
                 fprintf(yyout, ".size %s, %d\n", se->toStr().c_str() + 1, se->getType()->getSize() / 8);
                 fprintf(yyout, "%s:\n", se->toStr().c_str() + 1);
                 if (se->getType()->isInt())
                     fprintf(yyout, "\t.word %d\n", (int)((IdentifierSymbolEntry *)se)->getValue());
-                if (se->getType()->isFloat())
-                {
+                if (se->getType()->isFloat()) {
                     float value = (float)((IdentifierSymbolEntry *)se)->getValue();
                     uint32_t num = *((uint32_t *)&value);
                     fprintf(yyout, "\t.word %u\n", num);
@@ -830,14 +798,12 @@ void MachineUnit::PrintGlobalDecl()
     }
 }
 
-void MachineUnit::printLTORG()
+void MachineUnit::printGlobal()
 {
     // 打印文字池
-    if (global_vars.size() > 0)
-    {
-        fprintf(yyout, "\n.LTORG\n");//.LTORG: 用于标记文字池的开始
-        for (auto se : global_vars)
-        {
+    if (global_vars.size() > 0) {
+        // fprintf(yyout, "\n.LTORG\n");//.LTORG: 用于标记文字池的开始
+        for (auto se : global_vars) {
             fprintf(yyout, "addr_%s_%d:\n", se->toStr().c_str() + 1, ltorg_num);
             fprintf(yyout, "\t.word %s\n", se->toStr().c_str() + 1);
         }
@@ -859,5 +825,6 @@ void MachineUnit::output()
     fprintf(yyout, "\n\t.text\n");
     for (auto iter : func_list)
         iter->output();
-    printLTORG();//最后要输出全局变量标签信息
+    fprintf(yyout, "\n.LTORG\n");//.LTORG: 用于标记文字池的开始
+    printGlobal();//最后要输出全局变量标签信息
 }

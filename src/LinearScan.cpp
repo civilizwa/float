@@ -88,55 +88,52 @@ void LinearScan::computeLiveIntervals()
 {
     makeDuChains();
     intervals.clear();
-    for (auto &du_chain : du_chains)
-    {
+    // compute live intervals
+    for (auto &du_chain : du_chains) {
         int t = -1;
         for (auto &use : du_chain.second)
             t = std::max(t, use->getParent()->getNo());
-        Interval *interval = new Interval({du_chain.first->getParent()->getNo(), t, false, 0, 0, {du_chain.first}, du_chain.second, du_chain.first->isFReg()});
-        intervals.push_back(interval);
+        Interval *interval = new Interval({du_chain.first->getParent()->getNo(), 
+            t, false, 0, 0, {du_chain.first}, du_chain.second, du_chain.first->isFReg()});
+        intervals.push_back(std::move(interval));
     }
-    for (auto &interval : intervals)
-    {
+    // compute start and end of live intervals
+    for (auto &interval : intervals) {
         auto uses = interval->uses;
         auto begin = interval->start;
         auto end = interval->end;
-        for (auto block : func->getBlocks())
-        {
+        // find the first and last operand
+        for (auto block : func->getBlocks()) {
             auto liveIn = block->getLiveIn();
             auto liveOut = block->getLiveOut();
             bool in = false;
             bool out = false;
+            // check if the vreg is live in or live out
             for (auto use : uses)
-                if (liveIn.count(use))
-                {
-                    in = true;
+                if (liveIn.count(use)) {
+                    in = true; // the vreg is live in
                     break;
                 }
             for (auto use : uses)
-                if (liveOut.count(use))
-                {
+                if (liveOut.count(use)) {
                     out = true;
                     break;
                 }
-            if (in && out)
-            {
+            // compute the start and end of the interval 
+            if (in && out) {
+                // if the vreg is live in and live out, the interval is the whole block
                 begin = std::min(begin, (*(block->begin()))->getNo());
                 end = std::max(end, (*(block->rbegin()))->getNo());
             }
-            else if (!in && out)
-            {
+            else if (!in && out) {
                 for (auto i : block->getInsts())
-                    if (i->getDef().size() > 0 &&
-                        i->getDef()[0] == *(uses.begin()))
-                    {
+                    if (i->getDef().size() > 0 && i->getDef().front() == *(uses.begin())) {
                         begin = std::min(begin, i->getNo());
                         break;
                     }
                 end = std::max(end, (*(block->rbegin()))->getNo());
             }
-            else if (in && !out)
-            {
+            else if (in && !out) {
                 begin = std::min(begin, (*(block->begin()))->getNo());
                 int temp = 0;
                 for (auto use : uses)
@@ -145,31 +142,28 @@ void LinearScan::computeLiveIntervals()
                 end = std::max(temp, end);
             }
         }
+        // set the start and end of the interval
         interval->start = begin;
         interval->end = end;
     }
-    bool change;
-    change = true;
-    while (change)
-    {
+    bool change = true;// if there is a change in the intervals
+    while (change) {
         change = false;
-        std::vector<Interval *> t(intervals.begin(), intervals.end());
+        std::vector<Interval* >t;
+        t.insert(t.begin(), intervals.begin(), intervals.end());
+        // merge intervals that have the same def and use
         for (size_t i = 0; i < t.size(); i++)
-            for (size_t j = i + 1; j < t.size(); j++)
-            {
+            for (size_t j = i + 1; j < t.size(); j++) {
                 Interval *w1 = t[i];
                 Interval *w2 = t[j];
-                if (**w1->defs.begin() == **w2->defs.begin())
-                {
+                if (**w1->defs.begin() == **w2->defs.begin()) {
                     std::set<MachineOperand *> temp;
-                    set_intersection(w1->uses.begin(), w1->uses.end(), w2->uses.begin(), w2->uses.end(), inserter(temp, temp.end()));
-                    if (!temp.empty())
-                    {
+                    set_intersection(w1->uses.begin(), w1->uses.end(),
+                         w2->uses.begin(), w2->uses.end(), inserter(temp, temp.end()));
+                    if (!temp.empty()) {
                         change = true;
                         w1->defs.insert(w2->defs.begin(), w2->defs.end());
                         w1->uses.insert(w2->uses.begin(), w2->uses.end());
-                        // w1->start = std::min(w1->start, w2->start);
-                        // w1->end = std::max(w1->end, w2->end);
                         auto w1Min = std::min(w1->start, w1->end);
                         auto w1Max = std::max(w1->start, w1->end);
                         auto w2Min = std::min(w2->start, w2->end);

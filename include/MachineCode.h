@@ -252,6 +252,7 @@ private:
     std::vector<MachineInstruction *> unsure_insts;
     std::set<MachineOperand *> live_in;
     std::set<MachineOperand *> live_out;
+    int cmpCond;
 
 public:
     std::vector<MachineInstruction *> &getInsts() { return inst_list; };
@@ -281,6 +282,8 @@ public:
     std::vector<MachineBlock *> &getPreds() { return pred; };
     std::vector<MachineBlock *> &getSuccs() { return succ; };
     MachineFunction *getParent() { return parent; };
+    int getCmpCond() const { return cmpCond; };
+    void setCmpCond(int cond) { cmpCond = cond; };
     void output();
 };
 
@@ -292,6 +295,7 @@ private:
     int stack_size;
     std::set<int> saved_regs;
     SymbolEntry *sym_ptr;
+    bool isleaf = true;
 
 public:
     std::vector<MachineBlock *> &getBlocks() { return block_list; };
@@ -314,6 +318,8 @@ public:
     std::vector<MachineOperand *> getSavedRegs();
     std::vector<MachineOperand *> getSavedFRegs();
     MachineUnit *getParent() { return parent; };
+    bool Isleaf() { return isleaf; };
+    void setUnleaf() { isleaf = false; };
     void output();
 };
 
@@ -331,7 +337,7 @@ public:
     std::vector<MachineFunction *>::iterator end() { return func_list.end(); };
     void InsertFunc(MachineFunction *func) { func_list.push_back(func); };
     void setGlobalVars(std::vector<SymbolEntry *> gv) { global_vars = gv; };
-    void printLTORG(); // 打印文字池
+    void printGlobal(); // 打印文字池
     int getLtorgNum() { return ltorg_num; };
     void output();
 };

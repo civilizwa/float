@@ -25,7 +25,7 @@ public:
     iterator end() { return func_list.end(); };
     reverse_iterator rbegin() { return func_list.rbegin(); };
     reverse_iterator rend() { return func_list.rend(); };
-    void addGlobalVar(SymbolEntry *se) { global_vars.push_back(se); };
+    void insertGlobal(SymbolEntry *se) { global_vars.push_back(se); };
     void insertDeclare(SymbolEntry *se) { declare_list.push_back(se); };
     void genMachineCode(MachineUnit *munit);
 };
