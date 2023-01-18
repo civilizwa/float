@@ -603,13 +603,19 @@ MachineOperand *Instruction::genMachineOperand(Operand *ope, AsmBuilder *builder
         else
             mope = new MachineOperand(MachineOperand::IMM, dynamic_cast<ConstantSymbolEntry *>(se)->getValue());
     }
-    else if (se->isTemporary()) {
-        // 这个一会再管
-        if (dynamic_cast<TemporarySymbolEntry* >(se)->isParam() && builder) {
+    else if (se->isTemporary())
+    {
+        // 对函数参数生成操作数  
+        if (((TemporarySymbolEntry *)se)->isParam() )
+        {
+            //获取该函数参数的序号
+            //如果存在可使用的寄存器，则直接使用
+            //否则需要从栈中加载，生成虚拟寄存器
             int argNum = dynamic_cast<TemporarySymbolEntry *>(se)->getArgNum();
-            if (se->getType()->isFloat()) {
-                // https://developer.arm.com/documentation/den0018/a/Compiling-NEON-Instructions/NEON-assembler-and-ABI-restrictions/Passing-arguments-in-NEON-and-floating-point-registers?lang=en
-                if (argNum < 16 && argNum >= 0) {
+            if (se->getType()->isFloat())
+            {
+                if (argNum < 16 && argNum >= 0)
+                {
                     mope = new MachineOperand(MachineOperand::REG, argNum, true);
                 }
                 else { // 要从栈里加载
@@ -1003,14 +1009,15 @@ void UnaryInstruction::genMachineCode(AsmBuilder *builder)
         cur_inst = new BinaryMInstruction(cur_block, op, dst, imm0, src);
         cur_block->InsertInst(cur_inst);
         break;
-    case FADD:
-        op = BinaryMInstruction::VADD;
-        cur_inst = new BinaryMInstruction(cur_block, op, dst, imm0, src);
-        cur_block->InsertInst(cur_inst);
-        break;
-    case FSUB:
-        op = BinaryMInstruction::VSUB;
-        cur_inst = new BinaryMInstruction(cur_block, op, dst, imm0, src);
+    case NOT: // 这里没用到，NOT用的是XOR指令
+        if (src->isImm())
+        {
+            auto internal_reg = genMachineVReg();
+            cur_inst = new LoadMInstruction(cur_block, LoadMInstruction::LDR ,internal_reg, src);
+            cur_block->InsertInst(cur_inst);
+            src = new MachineOperand(*internal_reg);
+        }
+        cur_inst = new CmpMInstruction(cur_block, CmpMInstruction::CMP, src, new MachineOperand(*imm0));
         cur_block->InsertInst(cur_inst);
         break;
     // case NOT: // 这里没用到，NOT用的是XOR指令

@@ -518,21 +518,21 @@ void VmrsMInstruction::output()
     fprintf(yyout, "\tvmrs APSR_nzcv, FPSCR\n");
 }
 
-UxtbMInstruction::UxtbMInstruction(MachineBlock* p,MachineOperand* src)
-{
-    this->parent=p;
-    this->use_list.push_back(src);
-    src->setParent(this);
-}
+// UxtbMInstruction::UxtbMInstruction(MachineBlock* p,MachineOperand* src)
+// {
+//     this->parent=p;
+//     this->use_list.push_back(src);
+//     src->setParent(this);
+// }
 
-void UxtbMInstruction::output()
-{
-    fprintf(yyout,"\tuxtb ");
-    use_list[0]->output();
-    fprintf(yyout," ,");
-    use_list[0]->output();
-    fprintf(yyout,"\n");
-}
+// void UxtbMInstruction::output()
+// {
+//     fprintf(yyout,"\tuxtb ");
+//     use_list[0]->output();
+//     fprintf(yyout," ,");
+//     use_list[0]->output();
+//     fprintf(yyout,"\n");
+// }
 
 MachineFunction::MachineFunction(MachineUnit *p, SymbolEntry *sym_ptr)
 {
