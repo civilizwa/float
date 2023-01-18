@@ -590,13 +590,19 @@ MachineOperand *Instruction::genMachineOperand(Operand *ope, AsmBuilder *builder
         else
             mope = new MachineOperand(MachineOperand::IMM, dynamic_cast<ConstantSymbolEntry *>(se)->getValue());
     }
-    else if (se->isTemporary()) {
-        // 这个一会再管
-        if (dynamic_cast<TemporarySymbolEntry* >(se)->isParam() && builder) {
+    else if (se->isTemporary())
+    {
+        // 对函数参数生成操作数  
+        if (((TemporarySymbolEntry *)se)->isParam() )
+        {
+            //获取该函数参数的序号
+            //如果存在可使用的寄存器，则直接使用
+            //否则需要从栈中加载，生成虚拟寄存器
             int argNum = dynamic_cast<TemporarySymbolEntry *>(se)->getArgNum();
-            if (se->getType()->isFloat()) {
-                // https://developer.arm.com/documentation/den0018/a/Compiling-NEON-Instructions/NEON-assembler-and-ABI-restrictions/Passing-arguments-in-NEON-and-floating-point-registers?lang=en
-                if (argNum < 16 && argNum >= 0) {
+            if (se->getType()->isFloat())
+            {
+                if (argNum < 16 && argNum >= 0)
+                {
                     mope = new MachineOperand(MachineOperand::REG, argNum, true);
                 }
                 else { // 要从栈里加载
@@ -931,6 +937,25 @@ void UnaryInstruction::genMachineCode(AsmBuilder *builder)
     MachineInstruction *cur_inst = 0;
     auto dst = genMachineOperand(operands[0]);
     auto src = genMachineOperand(operands[1]);
+    if (src->isImm())
+    {
+        //将其先存入虚拟寄存器中
+        int value = src->getVal(); 
+            auto internal_r = genMachineVReg();
+            if (AsmBuilder::judge(value)) {
+                auto cur_inst = new MovMInstruction(cur_block, MovMInstruction::MOV, internal_r, src);//将立即数加载到虚拟寄存器中
+                cur_block->InsertInst(cur_inst);
+            }
+            else {
+                DeuLegal(value,internal_r,cur_block);
+            }
+            src = new MachineOperand(*internal_r);
+        if (this->opcode >= FADD && this->opcode <= FNOT) {
+            auto internal_reg = genMachineVReg(true);
+            cur_block->InsertInst(new MovMInstruction(cur_block, MovMInstruction::VMOV, internal_reg, src));
+            src = new MachineOperand(*internal_reg);
+        }
+    }
     int op;
     auto internal_reg = genMachineVReg();
     cur_inst = new LoadMInstruction(cur_block, LoadMInstruction::LDR, internal_reg, genMachineImm(0));
@@ -949,7 +974,7 @@ void UnaryInstruction::genMachineCode(AsmBuilder *builder)
         cur_inst = new BinaryMInstruction(cur_block, op, dst, new MachineOperand(*imm0), src);
         cur_block->InsertInst(cur_inst);
         break;
-    case NOT: // 这里没用到，NOT用的是XOR指令
+    case NOT: 
         if (src->isImm())
         {
             auto internal_reg = genMachineVReg();

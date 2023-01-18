@@ -178,7 +178,7 @@ public:
     UnaryInstruction(unsigned opcode, Operand* dst, Operand *src, BasicBlock *insert_bb=nullptr);    
     ~UnaryInstruction();
     void output() const;
-    enum{SUB, ADD, NOT};
+    enum{SUB, ADD, NOT,FSUB,FADD,FNOT};
     void genMachineCode(AsmBuilder*);
 };
 
