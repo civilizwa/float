@@ -90,21 +90,7 @@ public:
     ~BinaryInstruction();
     void output() const;
     void genMachineCode(AsmBuilder *);
-    enum
-    {
-        ADD = 0,
-        SUB,
-        MUL,
-        DIV,
-        AND,
-        OR,
-        MOD,
-        XOR,
-        FADD,
-        FSUB,
-        FMUL,
-        FDIV
-    };
+    enum { ADD, SUB, MUL, DIV, AND, OR, MOD, XOR, FADD, FSUB, FMUL, FDIV };
     
 };
 
@@ -115,7 +101,7 @@ public:
     ~CmpInstruction();
     void output() const;
     void genMachineCode(AsmBuilder *);
-    enum { E, NE, GE, L, LE, G,FE,FNE,FGE,FL,FLE,FG };
+    enum { E, NE, GE, L, LE, G, FE, FNE, FGE, FL, FLE, FG };
 };
 
 // unconditional branch
@@ -178,7 +164,7 @@ public:
     UnaryInstruction(unsigned opcode, Operand* dst, Operand *src, BasicBlock *insert_bb=nullptr);    
     ~UnaryInstruction();
     void output() const;
-    enum{SUB, ADD, NOT};
+    enum{ADD, SUB, NOT, FADD, FSUB, FNOT};
     void genMachineCode(AsmBuilder*);
 };
 

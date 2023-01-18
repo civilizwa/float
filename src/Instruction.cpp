@@ -203,7 +203,8 @@ void BinaryInstruction::output() const
     fprintf(yyout, "  %s = %s %s %s, %s\n", dst.c_str(), op.c_str(), type.c_str(), src1.c_str(), src2.c_str());
 }
 
-UnaryInstruction::UnaryInstruction(unsigned opcode, Operand *dst, Operand *src, BasicBlock *insert_bb) : Instruction(UNARY, insert_bb)
+UnaryInstruction::UnaryInstruction(unsigned opcode, Operand *dst, Operand *src, BasicBlock *insert_bb)
+     : Instruction(UNARY, insert_bb)
 {
     this->opcode = opcode;
     operands.push_back(std::move(dst));
@@ -237,6 +238,18 @@ void UnaryInstruction::output() const
     else if(opcode == UnaryInstruction::NOT){
         op = "icmp ne";
         fprintf(yyout, "  %s = %s %s %s, 0\n", s1.c_str(), op.c_str(), type.c_str(), s2.c_str());
+    }
+    else if(opcode == UnaryInstruction::FADD) {
+        op = "fadd";
+        fprintf(yyout, "  %s = %s %s 0.0, %s\n", s1.c_str(), op.c_str(), type.c_str(), s2.c_str());
+    }
+    else if(opcode == UnaryInstruction::FSUB) {
+        op = "fsub";
+        fprintf(yyout, "  %s = %s %s 0.0, %s\n", s1.c_str(), op.c_str(), type.c_str(), s2.c_str());
+    }
+    else if(opcode == UnaryInstruction::FNOT) {
+        op = "fcmp une";
+        fprintf(yyout, "  %s = %s %s %s, 0.0\n", s1.c_str(), op.c_str(), type.c_str(), s2.c_str());
     }
 }
 
@@ -923,20 +936,61 @@ void BinaryInstruction::genMachineCode(AsmBuilder *builder)
     cur_block->InsertInst(cur_inst);
 }
 
-//先抄上，之后再改，增加一些浮点数判断(shm抄来的)
+// 会调用Unary只有ADD和SUB的情况，NOT是用cmp和xor来处理的
 void UnaryInstruction::genMachineCode(AsmBuilder *builder)
 {
     // TODO
     auto cur_block = builder->getBlock();
-    MachineInstruction *cur_inst = 0;
+    MachineInstruction *cur_inst = nullptr;
     auto dst = genMachineOperand(operands[0]);
     auto src = genMachineOperand(operands[1]);
-    int op;
-    auto internal_reg = genMachineVReg();
-    cur_inst = new LoadMInstruction(cur_block, LoadMInstruction::LDR, internal_reg, genMachineImm(0));
-    // cur_inst = new LoadMInstruction(cur_block, internal_reg, genMachineImm(0));
-    cur_block->InsertInst(cur_inst);
-    auto imm0 = new MachineOperand(*internal_reg);
+    MachineOperand *imm0 = nullptr;;
+    // 如果是浮点数，那么imm0为0.0，否则为0
+    if (operands[0]->getType()->isFloat())
+    {
+        auto internal_r = genMachineVReg();
+        Operand* zero = new Operand(new ConstantSymbolEntry(TypeSystem::floatType, 0.0));
+        auto MachineZero = genMachineOperand(zero);
+        cur_block->InsertInst(new MovMInstruction(cur_block, MovMInstruction::MOV, internal_r, MachineZero));
+        auto internal_reg = genMachineVReg(true);
+        cur_block->InsertInst(new MovMInstruction(cur_block, MovMInstruction::VMOV, internal_reg, MachineZero));
+        imm0 = new MachineOperand(*internal_reg);
+    }
+    else
+    {
+        auto internal_reg = genMachineVReg();
+        cur_block->InsertInst(new MovMInstruction(cur_block, MovMInstruction::MOV, internal_reg, genMachineImm(0)));
+        imm0 = new MachineOperand(*internal_reg);
+    }
+    // 如果src是浮点数，那么要先把它放到寄存器里
+    if (src->isImm()) {
+        // 浮点数 opcode为FADD和FSUB
+        if (this->opcode == FADD || this->opcode == FSUB) {
+            int value = src->getVal();
+            auto internal_r = genMachineVReg();
+            if (AsmBuilder::judge(value)) {
+                // 将立即数加载到虚拟寄存器中
+                auto cur_inst = new MovMInstruction(cur_block, MovMInstruction::MOV, internal_r, src);//将立即数加载到虚拟寄存器中
+                cur_block->InsertInst(cur_inst);
+            }
+            else {
+                DeuLegal(value, internal_r, cur_block);
+            }
+            src = new MachineOperand(*internal_r);
+            auto internal_reg = genMachineVReg(true);
+            cur_block->InsertInst(new MovMInstruction(cur_block, MovMInstruction::VMOV, internal_reg, src));
+            src = new MachineOperand(*internal_reg);
+        }
+        else if(!AsmBuilder::judge(src->getVal())) {
+            // 如果是整数，且不是立即数，那么要先把它放到寄存器里
+            int value = src->getVal();
+            auto internal_r = genMachineVReg();
+            DeuLegal(value, internal_r, cur_block);
+            cur_block->InsertInst(new MovMInstruction(cur_block, MovMInstruction::MOV, internal_r, src));
+            src = new MachineOperand(*internal_r);
+        }
+    }
+    int op = INT_MIN;
     switch (opcode)
     {
     case ADD:
@@ -946,24 +1000,34 @@ void UnaryInstruction::genMachineCode(AsmBuilder *builder)
         break;
     case SUB:
         op = BinaryMInstruction::SUB;
-        cur_inst = new BinaryMInstruction(cur_block, op, dst, new MachineOperand(*imm0), src);
+        cur_inst = new BinaryMInstruction(cur_block, op, dst, imm0, src);
         cur_block->InsertInst(cur_inst);
         break;
-    case NOT: // 这里没用到，NOT用的是XOR指令
-        if (src->isImm())
-        {
-            auto internal_reg = genMachineVReg();
-            cur_inst = new LoadMInstruction(cur_block, LoadMInstruction::LDR ,internal_reg, src);
-            cur_block->InsertInst(cur_inst);
-            src = new MachineOperand(*internal_reg);
-        }
-        cur_inst = new CmpMInstruction(cur_block, CmpMInstruction::CMP, src, new MachineOperand(*imm0));
-        cur_block->InsertInst(cur_inst);
-        cur_inst = new MovMInstruction(cur_block, MovMInstruction::MOV, dst, genMachineImm(1), MachineInstruction::NE);
-        cur_block->InsertInst(cur_inst);
-        cur_inst = new MovMInstruction(cur_block, MovMInstruction::MOV, new MachineOperand(*dst), genMachineImm(0), MachineInstruction::EQ);
+    case FADD:
+        op = BinaryMInstruction::VADD;
+        cur_inst = new BinaryMInstruction(cur_block, op, dst, imm0, src);
         cur_block->InsertInst(cur_inst);
         break;
+    case FSUB:
+        op = BinaryMInstruction::VSUB;
+        cur_inst = new BinaryMInstruction(cur_block, op, dst, imm0, src);
+        cur_block->InsertInst(cur_inst);
+        break;
+    // case NOT: // 这里没用到，NOT用的是XOR指令
+    //     if (src->isImm())
+    //     {
+    //         auto internal_reg = genMachineVReg();
+    //         cur_inst = new LoadMInstruction(cur_block, LoadMInstruction::LDR ,internal_reg, src);
+    //         cur_block->InsertInst(cur_inst);
+    //         src = new MachineOperand(*internal_reg);
+    //     }
+    //     cur_inst = new CmpMInstruction(cur_block, CmpMInstruction::CMP, src, new MachineOperand(*imm0));
+    //     cur_block->InsertInst(cur_inst);
+    //     cur_inst = new MovMInstruction(cur_block, MovMInstruction::MOV, dst, genMachineImm(1), MachineInstruction::NE);
+    //     cur_block->InsertInst(cur_inst);
+    //     cur_inst = new MovMInstruction(cur_block, MovMInstruction::MOV, new MachineOperand(*dst), genMachineImm(0), MachineInstruction::EQ);
+    //     cur_block->InsertInst(cur_inst);
+    //     break;
     }
 }
 

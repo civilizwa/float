@@ -526,9 +526,8 @@ void UnaryExpr::genCode()
     {
     case UnaryExpr::SUB:
         if (expr->getType()->isInt()) {
-            opcode = BinaryInstruction::SUB;
-            cse = new ConstantSymbolEntry(TypeSystem::intType, 0);
-            new BinaryInstruction(opcode, dst, new Operand(cse), src, bb);
+            opcode = UnaryInstruction::SUB;
+            new UnaryInstruction(opcode, dst, src, bb);
         }
         else if (expr->getType()->isFloat()) {
             opcode = BinaryInstruction::FSUB;
@@ -560,14 +559,14 @@ void UnaryExpr::genCode()
         break;
     case UnaryExpr::ADD:
         if (expr->getType()->isInt()) {
-            opcode = BinaryInstruction::ADD;
-            cse = new ConstantSymbolEntry(TypeSystem::intType, 0);
-            new BinaryInstruction(opcode, dst, new Operand(cse), src, bb);
+            opcode = UnaryInstruction::ADD;
+            new UnaryInstruction(opcode, dst, src, bb);
+            // new BinaryInstruction(opcode, dst, new Operand(cse), src, bb);
         }
         else if (expr->getType()->isFloat()) {
-            opcode = BinaryInstruction::FADD;
-            cse = new ConstantSymbolEntry(TypeSystem::floatType, 0);
-            new BinaryInstruction(opcode, dst, new Operand(cse), src, bb);
+            opcode = UnaryInstruction::FADD;
+            new UnaryInstruction(opcode, dst, src, bb);
+            // new BinaryInstruction(opcode, dst, new Operand(cse), src, bb);
         }
         break;
     default:
